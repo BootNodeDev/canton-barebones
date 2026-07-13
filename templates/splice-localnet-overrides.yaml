@@ -1,0 +1,56 @@
+# Local guardrails for Splice LocalNet without modifying the downloaded checkout.
+services:
+  postgres:
+    logging: &default-logging
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  nginx:
+    logging: *default-logging
+
+  canton:
+    logging: *default-logging
+    environment:
+      LOG_LEVEL_STDOUT: "${LOG_LEVEL:-INFO}"
+      LOG_LEVEL_CANTON: "${LOG_LEVEL:-INFO}"
+
+  splice:
+    logging: *default-logging
+    environment:
+      LOG_LEVEL_STDOUT: "${LOG_LEVEL:-INFO}"
+      LOG_LEVEL_CANTON: "${LOG_LEVEL:-INFO}"
+
+  console:
+    logging: *default-logging
+
+  multi-sync-startup:
+    logging: *default-logging
+
+  multi-sync-ready:
+    logging: *default-logging
+
+  swagger-ui:
+    logging: *default-logging
+
+  wallet-web-ui-app-user:
+    logging: *default-logging
+
+  ans-web-ui-app-user:
+    logging: *default-logging
+
+  wallet-web-ui-app-provider:
+    logging: *default-logging
+
+  ans-web-ui-app-provider:
+    logging: *default-logging
+
+  wallet-web-ui-sv:
+    logging: *default-logging
+
+  sv-web-ui:
+    logging: *default-logging
+
+  scan-web-ui:
+    logging: *default-logging

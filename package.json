@@ -1,0 +1,30 @@
+{
+  "name": "@daapboster/canton-barebones",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Barebones one-click Canton developer stack.",
+  "bin": {
+    "canton-barebones": "./bin/canton-barebones.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/"
+  ],
+  "scripts": {
+    "init": "node ./bin/canton-barebones.js init",
+    "start": "node ./bin/canton-barebones.js start",
+    "stop": "node ./bin/canton-barebones.js stop",
+    "reset": "node ./bin/canton-barebones.js reset",
+    "status": "node ./bin/canton-barebones.js status",
+    "logs": "node ./bin/canton-barebones.js logs",
+    "setup": "node ./bin/canton-barebones.js setup",
+    "validate": "node ./bin/canton-barebones.js validate",
+    "compose": "node ./bin/canton-barebones.js compose",
+    "compose:config": "node ./bin/canton-barebones.js compose config",
+    "test": "node ./scripts/smoke-test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

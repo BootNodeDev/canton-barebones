@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "splice": {
+    "repo": "canton-network/splice",
+    "tag": "0.6.11"
+  },
+  "composeProjectName": "canton-barebones",
+  "dockerNetwork": "canton-barebones",
+  "profiles": [
+    "sv"
+  ],
+  "resourceConstraints": true,
+  "persistence": {
+    "mode": "persistent"
+  }
+}
