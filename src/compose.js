@@ -6,7 +6,7 @@ export const allLocalnetProfiles = ['app-provider', 'app-user', 'sv', 'swagger-u
 
 // Formats one Docker env-file line and strips newlines to keep generated files valid.
 function envLine(key, value) {
-  return `${key}=${String(value).replaceAll('\n', '')}`;
+  return `${key}=${String(value).replaceAll(/[\r\n]/g, '')}`;
 }
 
 // Converts configured LocalNet profiles into docker compose --profile flags.
@@ -90,7 +90,9 @@ export function runDockerCompose(config, commandArgs, options = {}) {
   }
 
   if (result.status !== 0) {
-    throw new Error(`docker compose exited with status ${result.status}`);
+    const stderr = result.stderr?.trim();
+    const detail = stderr ? `\n${stderr}` : '';
+    throw new Error(`docker compose exited with status ${result.status}${detail}`);
   }
 
   return result;
