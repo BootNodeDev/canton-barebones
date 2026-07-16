@@ -41,7 +41,7 @@ function assertFileExists(filePath, label) {
   }
 }
 
-// Loads config/canton-barebones.config.json from the project directory and resolves all paths.
+// Loads canton-barebones.config.json from the project directory and resolves all paths.
 export function loadConfig() {
   assertFileExists(configPath, 'Config file (run "canton-barebones init" first)');
 
