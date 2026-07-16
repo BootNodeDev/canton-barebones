@@ -86,7 +86,12 @@ export function runDockerCompose(config, commandArgs, options = {}) {
   });
 
   if (result.error) {
-    throw new Error(`docker is required to run Splice LocalNet: ${result.error.message}`);
+    // Surface a missing Docker binary as an actionable dependency error, mirroring
+    // how runGit reports a missing git; other spawn errors keep their raw detail.
+    if (result.error.code === 'ENOENT') {
+      throw new Error(`docker is required to run the stack: ${result.error.message}`);
+    }
+    throw result.error;
   }
 
   if (result.status !== 0) {
