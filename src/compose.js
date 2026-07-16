@@ -86,7 +86,7 @@ export function runDockerCompose(config, commandArgs, options = {}) {
   });
 
   if (result.error) {
-    throw result.error;
+    throw new Error(`docker is required to run Splice LocalNet: ${result.error.message}`);
   }
 
   if (result.status !== 0) {
