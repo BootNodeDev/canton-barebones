@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Command-line entry point. It reads the sub-command (init, start, stop, ...) and
+// runs it. Every command except `init`/`help` first loads and validates the config
+// (which also downloads Splice on first run), then shells out to Docker Compose.
+// The heavy lifting lives in src/*; this file is just the dispatcher.
 import { loadConfig } from '../src/config.js';
 import { init } from '../src/init.js';
 import {
