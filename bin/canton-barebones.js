@@ -9,7 +9,7 @@ import {
   allLocalnetProfiles,
   dockerComposeArgs,
   runDockerCompose,
-  writeRuntimeEnv,
+  writeLocalnetEnv,
 } from '../src/compose.js';
 
 // Prints the CLI contract without requiring Docker or a valid LocalNet checkout.
@@ -53,7 +53,7 @@ function main() {
       console.log(`LocalNet: ${config.localnetDir}`);
       return;
     case 'validate': {
-      const runtimeEnvPath = writeRuntimeEnv(config);
+      const runtimeEnvPath = writeLocalnetEnv(config);
       console.log(`Config OK: ${config.configPath}`);
       console.log(`Splice: ${config.splice.repo}@${config.splice.tag}`);
       console.log(`LocalNet: ${config.localnetDir}`);
