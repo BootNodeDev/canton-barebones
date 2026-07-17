@@ -56,7 +56,69 @@ Created lazily by the first command that reads your config (not by `init`). It i
 
 ## Configuration
 
-Run `npm run init` once to scaffold `canton-barebones.config.json`, then edit it. It pins the Splice version and selects which parts of the stack to run. The current baseline pins `canton-network/splice@0.6.11`.
+Run `npm run init` once to scaffold `canton-barebones.config.json`, then edit it. The scaffolded default is the **lightest stack**: only the SV runs; both validators and all tools are off. You turn things on as you need them.
+
+A Canton network here has three kinds of pieces:
+
+- **SV** (Super Validator) — the node that runs the *global synchronizer*, the shared backbone all participants connect to. It is required infrastructure, so it always runs fully (backend + its web dashboards). It has nothing to configure.
+- **Validators** — the participant nodes that run your apps. Splice's LocalNet ships two fixed slots, `appProvider` and `appUser`. Each has `enabled` (run its backend) and `ui` (also expose its web UIs).
+- **Network tools** — utilities that work across the nodes: the Canton `console`, `multiSync` (adds a second, local synchronizer), and `swaggerUI` (API docs).
+
+```jsonc
+{
+  "version": 1,
+  "splice": { "repo": "canton-network/splice", "tag": "0.6.11" }, // which Splice version to download
+  "composeProjectName": "canton-barebones",   // Docker Compose project name
+  "dockerNetwork": "cantonBarebones",         // Docker network name
+  "resourceConstraints": true,                 // apply Splice's CPU/memory limits
+  "persistence": { "mode": "persistent" },     // "persistent" keeps volumes; "ephemeral" wipes on reset
+
+  "validators": {
+    "appProvider": { "enabled": false, "ui": false },  // enabled = backend; ui = also show its web UIs
+    "appUser":     { "enabled": false, "ui": false }
+  },
+
+  "networkTools": { "console": false, "multiSync": false, "swaggerUI": false }
+}
+```
+
+Rules:
+
+- `ui` needs the backend, so it can only be `true` when that validator's `enabled` is `true`.
+- A validator's UIs come as one bundle (wallet + ANS): it is on-or-off per validator, not per individual UI. `enabled: true, ui: false` runs it **headless** — backend only, reached on its direct API ports.
+- Config changes take effect on the next `start`.
+
+### How your config becomes running services
+
+`src/compose.js` translates the config into the Docker Compose invocation (see the module comment there for detail). Splice wires nginx to route to each participant's UIs as fixed upstreams and refuses to start if one is missing, which shapes the levers:
+
+| Config | Effect |
+| --- | --- |
+| always | `--profile sv` runs the SV fully and, with it, the shared postgres/canton/splice/nginx |
+| `validators.*.enabled` | switches that validator's backend on/off via an env var |
+| `validators.*.ui` | on → also starts that validator's UIs; off (but enabled) → nginx is told to skip that validator so it runs headless |
+| a `networkTools` flag on | starts that tool via its profile |
+
+So the default config launches the SV only, and each flag you flip adds more.
+
+### How a headless validator works (the nginx override)
+
+Running a validator with its backend on but its UIs off (`enabled: true, ui: false`) needs a small trick, because Splice couples the two through nginx:
+
+1. The nginx image renders every `/etc/nginx/templates/*.template` file into `/etc/nginx/conf.d/` at startup.
+2. Splice mounts each validator's routing config there (e.g. `app-user.conf` → `/etc/nginx/templates/app-user.conf.template`). That config proxies to the validator's UI containers as fixed upstreams, and nginx **refuses to start** if an upstream host does not exist.
+3. Because the validator's backend is on, Splice renders its nginx config — so nginx would look for UI containers that we did not start, and crash.
+
+The wrapper works around this without editing any Splice file. Docker Compose deduplicates volume mounts by their target path, and the **last `-f` wins**. So the wrapper writes a generated override (`.generated/service-overrides.yaml`, passed last) that mounts an **empty file** over that exact template path:
+
+```
+Splice:            conf/nginx/app-user.conf → /etc/nginx/templates/app-user.conf.template
+Generated override: (empty file)            → /etc/nginx/templates/app-user.conf.template   ← wins
+
+nginx renders an empty app-user.conf → no routes for it → starts fine.
+```
+
+The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/splice-localnet-overrides.yaml` and `src/compose.js` for the full detail.
 
 ## Commands
 
