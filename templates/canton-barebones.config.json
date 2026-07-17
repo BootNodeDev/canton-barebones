@@ -5,12 +5,24 @@
     "tag": "0.6.11"
   },
   "composeProjectName": "canton-barebones",
-  "dockerNetwork": "canton-barebones",
-  "profiles": [
-    "sv"
-  ],
+  "dockerNetwork": "cantonBarebones",
   "resourceConstraints": true,
   "persistence": {
     "mode": "persistent"
+  },
+  "validators": {
+    "appProvider": {
+      "enabled": false,
+      "ui": false
+    },
+    "appUser": {
+      "enabled": false,
+      "ui": false
+    }
+  },
+  "networkTools": {
+    "console": false,
+    "multiSync": false,
+    "swaggerUI": false
   }
 }
