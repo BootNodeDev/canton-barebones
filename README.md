@@ -17,6 +17,7 @@ Splice LocalNet is powerful but has many moving parts and knobs. This tool is a 
 ## Getting started
 
 ```bash
+npm install     # install dependencies (run once)
 npm run init    # scaffold the config file into your project (run once)
 npm run start   # download Splice if needed, then start the stack
 ```
