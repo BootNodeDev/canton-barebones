@@ -164,16 +164,64 @@ Exposed through the same nginx port as each validator (`sv` 4000, `app-provider`
 | gRPC Ledger API | grpc-ledger-api.localhost:PORT (http2)                                    |
 | OpenAPI spec    | http://canton.localhost:PORT/docs/openapi                                 |
 
-## Commands
+## CLI reference
+
+The binary is `canton-barebones <command>`; the `npm run <command>` scripts wrap it. To pass a flag through npm, add `--` first (e.g. `npm run validate -- --json`).
+
+| Command             | What it does                                                                    | Side effects                                                                    | Docker |
+| ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------ |
+| `init [--force]`    | Scaffold the config and compose override into the project                        | Writes `canton-barebones.config.json` and `splice-localnet-overrides.yaml` (existing files are skipped unless `--force`) | no     |
+| `setup`             | Download the pinned Splice LocalNet source                                       | Writes `.generated/splice/…` on first run                                        | no     |
+| `validate`          | Validate the config and resolved Splice paths                                    | Writes `.generated/localnet.env`; downloads Splice on first run                  | no     |
+| `start`             | Start the stack (`docker compose up -d`)                                         | Starts containers, creates volumes and the Docker network                       | yes    |
+| `stop`              | Stop containers, keep volumes (`docker compose down`)                            | Removes containers; data volumes are preserved                                  | yes    |
+| `reset`             | Stop containers and remove volumes (`docker compose down -v`)                    | **Deletes all stack data**                                                       | yes    |
+| `status`            | Show service status (`docker compose ps`)                                        | none                                                                             | yes    |
+| `logs [args…]`      | Show logs (`docker compose logs`); extra args pass through                       | none                                                                             | yes    |
+| `compose <args…>`   | Run docker compose with the configured LocalNet files; **no args prints the computed docker command** (dry run) | depends on the args                                            | yes    |
+
+**Exit codes & output.** Every command exits `0` on success and `1` on failure, printing the error message to stderr.
+
+**`--json`** (on `validate`, `setup`, `status`) switches to machine-readable output: success goes to stdout, and on failure a `{ "ok": false, "error": "…" }` object goes to stderr, still exiting `1`. Use `validate --json` to see exactly what a config resolves to **without starting anything** — its `plan` field lists the compose profiles, headless validators, and participant env:
 
 ```bash
-npm run init            # scaffold config and compose overrides into the project
-npm run start           # start the stack (downloads Splice if missing or the pin changed)
-npm run stop            # stop containers, keep Docker volumes
-npm run reset           # stop containers and remove Docker volumes
-npm run status          # show compose service status
-npm run logs            # show compose logs
-npm run validate        # validate config and resolved Splice paths
-npm run compose:config  # print the resolved docker compose config
-npm run setup           # optional: pre-download the pinned Splice source (e.g. CI cache warming)
+canton-barebones validate --json
+# { "ok": true, "plan": { "upProfiles": ["sv","app-user"], "headlessValidators": [], "nodeEnv": {…} }, … }
+
+canton-barebones status --json    # one JSON object per service, straight from docker compose
 ```
+
+## Recipes
+
+Each recipe edits `canton-barebones.config.json`, then applies on the next `start`.
+
+| Goal                                   | Change                                                        | Apply           |
+| -------------------------------------- | ------------------------------------------------------------ | --------------- |
+| Expose a validator's UIs               | `validators.<name>.ui: true` (needs `enabled: true`)          | `npm run start` |
+| Run a validator headless (backend only)| `validators.<name>: { enabled: true, ui: false }`             | `npm run start` |
+| Turn a validator off                   | `validators.<name>.enabled: false`                            | `npm run start` |
+| Enable a network tool                  | `networkTools.<tool>: true`                                   | `npm run start` |
+| Wipe data on reset                     | `persistence.mode: "ephemeral"`                              | `npm run start` |
+| Use a different Splice version         | `splice.tag: "<tag>"`                                         | `npm run start` (re-downloads) |
+| Preview what a config will launch      | —                                                            | `npm run validate -- --json` (read `.plan`) |
+| Clean slate                            | —                                                            | `npm run reset` |
+
+## Verifying the stack
+
+`status` (or `status --json`) shows containers, but a container being up is not the same as a participant serving. To confirm a participant's backend is actually live, hit its `readyz` — the same probe Splice uses internally. Each participant has a port prefix: **`2` app-user, `3` app-provider, `4` sv**.
+
+```bash
+curl -sf http://localhost:2903/api/validator/readyz && echo "app-user ready"   # 3903 = app-provider, 4903 = sv
+docker exec splice ls /app/app-user/                                           # → "on" when that participant is active
+```
+
+For UIs, request them through nginx by hostname (see [UIs and endpoints](#uis-and-endpoints)), e.g. `curl -sI -H 'Host: wallet.localhost' http://localhost:2000/`.
+
+## Operational notes
+
+Non-obvious behaviors worth knowing before automating against the stack:
+
+- **No per-validator backend container.** The `sv`, `app-provider`, and `app-user` backends are multiplexed into the shared `canton` and `splice` containers, selected by the `*_PROFILE` env vars — not separate containers. Only the UIs and network tools run as their own containers, so `docker ps` never shows an `app-user` service.
+- **Ports are published statically.** Each participant's ports (prefix `2`/`3`/`4`) are always bound while the shared containers run, even for disabled participants. A bound port does **not** mean something is answering — use `readyz` as the source of truth.
+- **UIs go through nginx**, published on ports `2000`/`3000`/`4000`, not as per-UI host ports. `*.localhost` hostnames resolve to `127.0.0.1` automatically.
+- **Config changes apply on the next `start`** — nothing reacts to the file while the stack is running.
