@@ -18,16 +18,18 @@ assert.equal(config.splice.tag, '0.6.11');
 assert.equal(config.persistence.mode, 'persistent');
 assert.deepEqual(config.validators, {
   appProvider: { enabled: false, ui: false },
-  appUser: { enabled: false, ui: false },
+  appUser: { enabled: true, ui: false },
 });
 assert.deepEqual(config.networkTools, { console: false, multiSync: false, swaggerUI: false });
 
-// With the scaffolded default (both validators off, tools off), only the SV runs.
-// The `sv` profile also brings up the shared postgres/canton/splice/nginx, and no
-// validator is headless so no generated override is needed.
+// With the scaffolded default (app-provider off, app-user enabled headless, tools
+// off), only the SV profile is started: a headless validator adds no `--profile`
+// (its backend is switched via env), so `upProfiles` stays `['sv']`. That profile
+// also brings up the shared postgres/canton/splice/nginx. app-user being headless
+// means it lands in `headlessValidators`, which triggers the generated nginx override.
 const plan = deriveRuntimePlan(config);
 assert.deepEqual(plan.upProfiles, ['sv']);
-assert.deepEqual(plan.headlessValidators, []);
+assert.deepEqual(plan.headlessValidators, ['appUser']);
 assert.equal(runtimeEnvPath.endsWith('.generated/localnet.env'), true);
 assert.equal(config.localnetOverridePath.endsWith('splice-localnet-overrides.yaml'), true);
 assert.match(localnetOverride, /max-size: "25m"/);

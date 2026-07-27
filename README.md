@@ -56,7 +56,7 @@ Created lazily by the first command that reads your config (not by `init`). It i
 
 ## Configuration
 
-Run `npm run init` once to scaffold `canton-barebones.config.json`, then edit it. The scaffolded default is the **lightest stack**: only the SV runs; both validators and all tools are off. You turn things on as you need them.
+Run `npm run init` once to scaffold `canton-barebones.config.json`, then edit it. The scaffolded default is a **minimal working stack**: the SV plus the `appUser` validator running headless (its backend, no UIs); `appProvider` and all tools are off. You turn things on as you need them.
 
 A Canton network here has three kinds of pieces:
 
@@ -75,7 +75,7 @@ A Canton network here has three kinds of pieces:
 
   "validators": {
     "appProvider": { "enabled": false, "ui": false },  // enabled = backend; ui = also show its web UIs
-    "appUser":     { "enabled": false, "ui": false }
+    "appUser":     { "enabled": true,  "ui": false }   // default: backend on, UIs off (headless)
   },
 
   "networkTools": { "console": false, "multiSync": false, "swaggerUI": false }
@@ -99,7 +99,7 @@ Rules:
 | `validators.*.ui` | on → also starts that validator's UIs; off (but enabled) → nginx is told to skip that validator so it runs headless |
 | a `networkTools` flag on | starts that tool via its profile |
 
-So the default config launches the SV only, and each flag you flip adds more.
+So the default config launches the SV plus a headless `appUser`, and each flag you flip adds more.
 
 ### How a headless validator works (the nginx override)
 

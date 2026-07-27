@@ -16,7 +16,7 @@
       "ui": false
     },
     "appUser": {
-      "enabled": false,
+      "enabled": true,
       "ui": false
     }
   },

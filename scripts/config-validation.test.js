@@ -23,10 +23,11 @@ function assertRejects(raw, expectedFragment) {
 }
 
 // The scaffolded default shipped by `init`: version 1, a pinned Splice source,
-// persistent volumes, both validators off, and all network tools off. The SV is
-// not in the config — it is required infrastructure that always runs fully. This
-// is the baseline; every negative case below clones it and breaks a single rule,
-// so a failure points to one validation concern.
+// persistent volumes, app-provider off, app-user enabled headless (backend on,
+// UIs off), and all network tools off. The SV is not in the config — it is
+// required infrastructure that always runs fully. This is the baseline; every
+// negative case below clones it and breaks a single rule, so a failure points to
+// one validation concern.
 const validConfig = {
   version: 1,
   splice: { repo: 'canton-network/splice', tag: '0.6.11' },
@@ -36,7 +37,7 @@ const validConfig = {
   persistence: { mode: 'persistent' },
   validators: {
     appProvider: { enabled: false, ui: false },
-    appUser: { enabled: false, ui: false },
+    appUser: { enabled: true, ui: false },
   },
   networkTools: { console: false, multiSync: false, swaggerUI: false },
 };
