@@ -119,6 +119,51 @@ nginx renders an empty app-user.conf → no routes for it → starts fine.
 
 The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/splice-localnet-overrides.yaml` and `src/compose.js` for the full detail.
 
+## UIs and endpoints
+
+Assuming every flag is on, this is everything the stack exposes. Each participant gets its own nginx port (`sv` 4000, `app-provider` 3000, `app-user` 2000); the same hostnames (`wallet`, `ans`, `canton`, …) are reused per port. UIs only appear when that validator's `ui: true`; the SV is always on. All `*.localhost` names resolve to `127.0.0.1` automatically.
+
+### SV (port 4000, always on)
+
+| UI | URL |
+| --- | --- |
+| Landing page | http://localhost:4000 |
+| SV operations dashboard | http://sv.localhost:4000 |
+| Scan (network explorer) | http://scan.localhost:4000 |
+| Wallet | http://wallet.localhost:4000 |
+
+### app-user (port 2000, requires `validators.appUser.ui: true`)
+
+| UI | URL |
+| --- | --- |
+| Wallet | http://wallet.localhost:2000 (or http://localhost:2000) |
+| ANS (name service) | http://ans.localhost:2000 |
+
+### app-provider (port 3000, requires `validators.appProvider.ui: true`)
+
+| UI | URL |
+| --- | --- |
+| Wallet | http://wallet.localhost:3000 |
+| ANS (name service) | http://ans.localhost:3000 |
+
+### Network tools
+
+| Tool | URL / access | Requires |
+| --- | --- | --- |
+| Swagger UI (aggregated API docs) | http://localhost:9090 | `networkTools.swaggerUI` |
+| Canton console | interactive container, no web UI (`docker attach console`) | `networkTools.console` |
+| Multi-sync | no UI (adds a second local synchronizer) | `networkTools.multiSync` |
+
+### Ledger APIs (per validator, not UIs)
+
+Exposed through the same nginx port as each validator (`sv` 4000, `app-provider` 3000, `app-user` 2000):
+
+| Endpoint | URL |
+| --- | --- |
+| JSON Ledger API | http://json-ledger-api.localhost:PORT (also http://canton.localhost:PORT) |
+| gRPC Ledger API | grpc-ledger-api.localhost:PORT (http2) |
+| OpenAPI spec | http://canton.localhost:PORT/docs/openapi |
+
 ## Commands
 
 ```bash
