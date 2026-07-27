@@ -33,7 +33,6 @@ const validConfig = {
   splice: { repo: 'canton-network/splice', tag: '0.6.11' },
   composeProjectName: 'canton-barebones',
   dockerNetwork: 'cantonBarebones',
-  resourceConstraints: true,
   persistence: { mode: 'persistent' },
   validators: {
     appProvider: { enabled: false, ui: false },

@@ -70,7 +70,6 @@ A Canton network here has three kinds of pieces:
   "splice": { "repo": "canton-network/splice", "tag": "0.6.11" }, // which Splice version to download
   "composeProjectName": "canton-barebones",   // Docker Compose project name
   "dockerNetwork": "cantonBarebones",         // Docker network name
-  "resourceConstraints": true,                 // apply Splice's CPU/memory limits
   "persistence": { "mode": "persistent" },     // "persistent" keeps volumes; "ephemeral" wipes on reset
 
   "validators": {

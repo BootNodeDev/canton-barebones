@@ -154,9 +154,9 @@ export function dockerComposeArgs(config, options = {}) {
     path.resolve(config.localnetDir, 'compose.yaml'),
   ];
 
-  if (config.resourceConstraints) {
-    args.push('-f', path.resolve(config.localnetDir, 'resource-constraints.yaml'));
-  }
+  // Always apply Splice's CPU/memory limits: this is a local dev stack, so the
+  // constraints keep it from starving the host and match how Splice runs LocalNet.
+  args.push('-f', path.resolve(config.localnetDir, 'resource-constraints.yaml'));
 
   args.push('-f', config.localnetOverridePath);
 

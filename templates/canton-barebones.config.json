@@ -6,7 +6,6 @@
   },
   "composeProjectName": "canton-barebones",
   "dockerNetwork": "cantonBarebones",
-  "resourceConstraints": true,
   "persistence": {
     "mode": "persistent"
   },

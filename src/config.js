@@ -103,7 +103,6 @@ const configSchema = z
     splice: spliceSchema,
     composeProjectName: z.string().min(1, 'composeProjectName must be a non-empty string'),
     dockerNetwork: z.string().min(1, 'dockerNetwork must be a non-empty string'),
-    resourceConstraints: z.boolean(),
     persistence: persistenceSchema,
     validators: validatorsSchema,
     networkTools: networkToolsSchema,
@@ -169,10 +168,10 @@ export function validateLocalnetFiles(config) {
   assertFileExists(path.resolve(config.localnetEnvDir, 'postgres.env'), 'LocalNet postgres.env');
   assertFileExists(path.resolve(config.localnetEnvDir, 'splice.env'), 'LocalNet splice.env');
 
-  if (config.resourceConstraints) {
-    assertFileExists(
-      path.resolve(config.localnetDir, 'resource-constraints.yaml'),
-      'LocalNet resource-constraints.yaml'
-    );
-  }
+  // Resource limits are always applied in this dev stack (see compose.js), so the
+  // file must exist.
+  assertFileExists(
+    path.resolve(config.localnetDir, 'resource-constraints.yaml'),
+    'LocalNet resource-constraints.yaml'
+  );
 }
