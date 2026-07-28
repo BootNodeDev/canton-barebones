@@ -1,0 +1,79 @@
+# Local guardrails for Splice LocalNet without modifying the downloaded checkout.
+#
+# This is a Docker Compose override: the wrapper passes it as an extra `-f` after
+# Splice's own compose files, and Compose merges the two service-by-service. This
+# static file only sets log rotation. It is scaffolded into your project by `init`,
+# so you can add your own tweaks here.
+#
+# There is also a SECOND, GENERATED override at .generated/service-overrides.yaml
+# that the wrapper rewrites on every run (do not edit it). It runs "headless"
+# validators — backend on, UIs off — and it works by exploiting the same merge:
+#
+#   - nginx (the nginx Docker image) renders every /etc/nginx/templates/*.template
+#     through envsubst into /etc/nginx/conf.d/ at startup.
+#   - Splice mounts each validator's routing config there, e.g.
+#       conf/nginx/app-user.conf -> /etc/nginx/templates/app-user.conf.template
+#     and that config proxies to the validator's UI containers as fixed upstreams.
+#     If those UI containers are not running, nginx fails to start.
+#   - Compose deduplicates volume mounts by their target path, and the LAST `-f`
+#     wins. So the generated override mounts an EMPTY file over the exact same
+#     target (app-user.conf.template). nginx then renders an empty config, adds no
+#     routes for that validator, and starts fine — while the validator's backend
+#     still runs and stays reachable on its direct API ports.
+#
+# See src/compose.js (deriveRuntimePlan / writeGeneratedOverride) for how it is built.
+services:
+  postgres:
+    logging: &default-logging
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  nginx:
+    logging: *default-logging
+
+  canton:
+    logging: *default-logging
+    environment:
+      LOG_LEVEL_STDOUT: "${LOG_LEVEL:-INFO}"
+      LOG_LEVEL_CANTON: "${LOG_LEVEL:-INFO}"
+
+  splice:
+    logging: *default-logging
+    environment:
+      LOG_LEVEL_STDOUT: "${LOG_LEVEL:-INFO}"
+      LOG_LEVEL_CANTON: "${LOG_LEVEL:-INFO}"
+
+  console:
+    logging: *default-logging
+
+  multi-sync-startup:
+    logging: *default-logging
+
+  multi-sync-ready:
+    logging: *default-logging
+
+  swagger-ui:
+    logging: *default-logging
+
+  wallet-web-ui-app-user:
+    logging: *default-logging
+
+  ans-web-ui-app-user:
+    logging: *default-logging
+
+  wallet-web-ui-app-provider:
+    logging: *default-logging
+
+  ans-web-ui-app-provider:
+    logging: *default-logging
+
+  wallet-web-ui-sv:
+    logging: *default-logging
+
+  sv-web-ui:
+    logging: *default-logging
+
+  scan-web-ui:
+    logging: *default-logging
