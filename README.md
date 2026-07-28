@@ -16,6 +16,19 @@ Splice LocalNet is powerful but has many moving parts and knobs. This tool is a 
 
 ## Getting started
 
+### From npm
+
+> The npm package name is **TBD** (not published yet) — replace `<package>` below once it is published.
+
+```bash
+npx <package> init     # scaffold the config file into the current folder (run once)
+npx <package> start    # download Splice if needed, then start the stack
+```
+
+`npx` pulls the runtime dependencies automatically, so there is no separate install step.
+
+### From a cloned repo
+
 ```bash
 npm install     # install dependencies (run once)
 npm run init    # scaffold the config file into your project (run once)
@@ -99,26 +112,7 @@ Rules:
 | `validators.*.ui`        | on → also starts that validator's UIs; off (but enabled) → nginx is told to skip that validator so it runs headless |
 | a `networkTools` flag on | starts that tool via its profile                                                                                    |
 
-So the default config launches the SV plus a headless `appUser`, and each flag you flip adds more.
-
-### How a headless validator works (the nginx override)
-
-Running a validator with its backend on but its UIs off (`enabled: true, ui: false`) needs a small trick, because Splice couples the two through nginx:
-
-1. The nginx image renders every `/etc/nginx/templates/*.template` file into `/etc/nginx/conf.d/` at startup.
-2. Splice mounts each validator's routing config there (e.g. `app-user.conf` → `/etc/nginx/templates/app-user.conf.template`). That config proxies to the validator's UI containers as fixed upstreams, and nginx **refuses to start** if an upstream host does not exist.
-3. Because the validator's backend is on, Splice renders its nginx config — so nginx would look for UI containers that we did not start, and crash.
-
-CantonBarebones works around this without editing any Splice file. Docker Compose deduplicates volume mounts by their target path, and the **last `-f` wins**. So the wrapper writes a generated override (`.generated/service-overrides.yaml`, passed last) that mounts an **empty file** over that exact template path:
-
-```
-Splice:            conf/nginx/app-user.conf → /etc/nginx/templates/app-user.conf.template
-Generated override: (empty file)            → /etc/nginx/templates/app-user.conf.template   ← wins
-
-nginx renders an empty app-user.conf → no routes for it → starts fine.
-```
-
-The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/splice-localnet-overrides.yaml` and `src/compose.js` for the full detail.
+So the default config launches the SV plus a headless `appUser`, and each flag you flip adds more. (For _why_ a headless validator needs special handling, see [Design notes](#design-notes).)
 
 ## UIs and endpoints
 
@@ -192,21 +186,6 @@ canton-barebones validate --json
 canton-barebones status --json    # one JSON object per service, straight from docker compose
 ```
 
-## Recipes
-
-Each recipe edits `canton-barebones.config.json`, then applies on the next `start`.
-
-| Goal                                   | Change                                                        | Apply           |
-| -------------------------------------- | ------------------------------------------------------------ | --------------- |
-| Expose a validator's UIs               | `validators.<name>.ui: true` (needs `enabled: true`)          | `npm run start` |
-| Run a validator headless (backend only)| `validators.<name>: { enabled: true, ui: false }`             | `npm run start` |
-| Turn a validator off                   | `validators.<name>.enabled: false`                            | `npm run start` |
-| Enable a network tool                  | `networkTools.<tool>: true`                                   | `npm run start` |
-| Wipe data on reset                     | `persistence.mode: "ephemeral"`                              | `npm run start` |
-| Use a different Splice version         | `splice.tag: "<tag>"`                                         | `npm run start` (re-downloads) |
-| Preview what a config will launch      | —                                                            | `npm run validate -- --json` (read `.plan`) |
-| Clean slate                            | —                                                            | `npm run reset` |
-
 ## Verifying the stack
 
 `status` (or `status --json`) shows containers, but a container being up is not the same as a participant serving. To confirm a participant's backend is actually live, hit its `readyz` — the same probe Splice uses internally. Each participant has a port prefix: **`2` app-user, `3` app-provider, `4` sv**.
@@ -226,3 +205,61 @@ Non-obvious behaviors worth knowing before automating against the stack:
 - **Ports are published statically.** Each participant's ports (prefix `2`/`3`/`4`) are always bound while the shared containers run, even for disabled participants. A bound port does **not** mean something is answering — use `readyz` as the source of truth.
 - **UIs go through nginx**, published on ports `2000`/`3000`/`4000`, not as per-UI host ports. `*.localhost` hostnames resolve to `127.0.0.1` automatically.
 - **Config changes apply on the next `start`** — nothing reacts to the file while the stack is running.
+
+## Troubleshooting
+
+| Symptom                                                    | Cause                                                                        | Fix                                                                                    |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `Config version N is not compatible …`                     | The config predates the current schema                                      | `init --force` to get the new defaults, then re-apply your edits                        |
+| `Invalid canton-barebones.config.json: …`                  | A field is missing, mistyped, or the wrong type (the message names the path) | Fix the named field and re-run                                                          |
+| `docker is required to run the stack`                      | Docker is not installed or not running                                       | Install / start Docker, then retry                                                      |
+| Port already in use (e.g. `2000`, `4903`, `5432`)          | Another stack (or the same one) is already up on that port                   | `stop` the running stack, or free the port                                             |
+| Containers are up but a participant does not respond       | A bound port is not the same as a live backend                              | Check `readyz` (see [Verifying the stack](#verifying-the-stack))                        |
+| Stale or corrupted state after config churn                | Volumes hold old data                                                        | `reset` to wipe volumes, then `start`                                                   |
+| Anything under `.generated/` looks wrong                   | It is disposable                                                             | Delete `.generated/` — it is rebuilt on the next `start`                                |
+
+## Development
+
+### Source layout
+
+| File                      | Responsibility                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `bin/canton-barebones.js` | CLI entry point: parses the command and `--json`, dispatches to `src/*`                              |
+| `src/config.js`           | Loads and zod-validates the config; resolves runtime paths and the pinned Splice checkout            |
+| `src/compose.js`          | Turns the config into the Docker Compose invocation (profiles, env, generated overrides) and runs it |
+| `src/splice.js`           | Downloads and pins the Splice LocalNet source into `.generated/`                                     |
+| `src/init.js`             | Scaffolds the bundled templates into the project (`init`)                                            |
+| `src/output.js`           | Centralizes CLI output: human text vs `--json`, stdout vs stderr                                     |
+| `src/paths.js`            | Resolves paths against the package (bundled files) vs the project (your files)                       |
+
+### Testing
+
+| Command            | What it runs                                                                                                  | Needs Docker              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| `npm test`         | Unit tests (`node --test` over `scripts/**/*.test.js`) — config schema validation and the runtime plan       | no                        |
+| `npm run test:e2e` | Smoke test (`scripts/smoke.js`) — resolves the default config (SV + headless `appUser`) and drives a valid compose model | yes (+ a Splice checkout) |
+
+Run `npm test` for a fast check without Docker; run `npm run test:e2e` to exercise the full compose model end to end.
+
+## Design notes
+
+Deeper mechanics, not needed for day-to-day use.
+
+### How a headless validator works (the nginx override)
+
+Running a validator with its backend on but its UIs off (`enabled: true, ui: false`) needs a small trick, because Splice couples the two through nginx:
+
+1. The nginx image renders every `/etc/nginx/templates/*.template` file into `/etc/nginx/conf.d/` at startup.
+2. Splice mounts each validator's routing config there (e.g. `app-user.conf` → `/etc/nginx/templates/app-user.conf.template`). That config proxies to the validator's UI containers as fixed upstreams, and nginx **refuses to start** if an upstream host does not exist.
+3. Because the validator's backend is on, Splice renders its nginx config — so nginx would look for UI containers that we did not start, and crash.
+
+CantonBarebones works around this without editing any Splice file. Docker Compose deduplicates volume mounts by their target path, and the **last `-f` wins**. So the wrapper writes a generated override (`.generated/service-overrides.yaml`, passed last) that mounts an **empty file** over that exact template path:
+
+```
+Splice:            conf/nginx/app-user.conf → /etc/nginx/templates/app-user.conf.template
+Generated override: (empty file)            → /etc/nginx/templates/app-user.conf.template   ← wins
+
+nginx renders an empty app-user.conf → no routes for it → starts fine.
+```
+
+The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/splice-localnet-overrides.yaml` and `src/compose.js` for the full detail.
