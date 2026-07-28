@@ -1,81 +1,149 @@
+// Loads and checks canton-barebones.config.json — the single file a developer
+// edits to shape the stack. It uses zod (a schema library) to reject bad configs
+// with a clear message instead of failing deep inside Docker later, and then
+// resolves the extra runtime paths the rest of the tool needs. What the config
+// turns on and off, described inline with each schema: the two validators
+// (backend and, optionally, their UIs) and the network tools. The SV is not
+// configurable — it is required infrastructure and always runs fully.
 import fs from 'node:fs';
 import path from 'node:path';
+import { z } from 'zod';
 
 import { resolveFromProject } from './paths.js';
 import { ensureSpliceCheckout } from './splice.js';
 
+// Bumped when the config shape changes in a breaking way; an old file is then
+// rejected with an upgrade hint instead of a confusing field error.
 const CONFIG_VERSION = 1;
 const configPath = resolveFromProject('canton-barebones.config.json');
 
-// Reads JSON config files from disk so CLI commands all use the same parser.
+// Matches a GitHub "owner/repo" slug (e.g. "canton-network/splice").
+const GITHUB_REPO = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+
+// Reads and parses a JSON file, so every command loads config the same way.
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-// Validates string config values that are required to build compose arguments.
-function assertString(value, key) {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`${key} must be a non-empty string`);
-  }
-}
-
-// Validates boolean config flags so optional compose files are enabled explicitly.
-function assertBoolean(value, key) {
-  if (typeof value !== 'boolean') {
-    throw new Error(`${key} must be a boolean`);
-  }
-}
-
-// Validates the owner/repository GitHub slug used to fetch Splice.
-function assertGithubRepo(value, key) {
-  assertString(value, key);
-  if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(value)) {
-    throw new Error(`${key} must use the "owner/repo" format`);
-  }
-}
-
-// Fails fast when this wrapper points at a missing LocalNet file.
+// Fails fast when this wrapper points at a missing file.
 function assertFileExists(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`${label} does not exist: ${filePath}`);
   }
 }
 
-// Loads canton-barebones.config.json from the project directory and resolves all paths.
-export function loadConfig() {
-  assertFileExists(configPath, 'Config file (run "canton-barebones init" first)');
+const spliceSchema = z
+  .object({
+    repo: z.string().regex(GITHUB_REPO, 'splice.repo must use the "owner/repo" format'),
+    tag: z.string().min(1, 'splice.tag must be a non-empty string'),
+  })
+  .strict();
 
-  const raw = readJson(configPath);
+const persistenceSchema = z
+  .object({
+    // Controls whether Docker volumes survive a reset or are wiped for clean state.
+    mode: z.enum(['persistent', 'ephemeral']),
+  })
+  .strict();
 
-  if (raw.version !== CONFIG_VERSION) {
+// A validator (Splice LocalNet ships two fixed slots: app-provider and app-user).
+// `enabled` runs the backend (the participant node + validator app, multiplexed
+// into the shared canton/splice processes via env, not separate containers).
+// `ui` also exposes that validator's web UIs (wallet + ANS) through nginx. They
+// come as one bundle: nginx routes to both, so it is all-or-nothing per validator,
+// not per-UI. `ui: false` runs the validator headless (backend only, reached on
+// its direct API ports).
+const validatorSchema = z
+  .object({
+    enabled: z.boolean(),
+    ui: z.boolean(),
+  })
+  .strict()
+  .superRefine((validator, ctx) => {
+    // The UIs need their backend to point at, so `ui` cannot be on while the
+    // validator itself is disabled.
+    if (validator.ui && !validator.enabled) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ui'],
+        message: 'ui requires enabled: true',
+      });
+    }
+  });
+
+// Splice LocalNet only exposes two participant validators; both are always present
+// in the config and toggled via `enabled`, so this is a fixed-key object rather
+// than an open array. (The SV is not here: it is required infrastructure — it
+// founds the global synchronizer validators connect to — so it always runs fully,
+// with its own UIs, and has nothing to toggle.)
+const validatorsSchema = z
+  .object({
+    appProvider: validatorSchema,
+    appUser: validatorSchema,
+  })
+  .strict();
+
+// Cross-node tooling that operates over the participants (SV + validators): the
+// Canton console, the extra local application synchronizer, and the aggregated
+// Swagger UI. All are optional and off by default.
+const networkToolsSchema = z
+  .object({
+    console: z.boolean(),
+    multiSync: z.boolean(),
+    swaggerUI: z.boolean(),
+  })
+  .strict();
+
+// Top-level config schema. `.strict()` on every object rejects unknown top-level
+// fields and unknown keys, so typos and stale keys fail loudly instead of being
+// silently ignored.
+const configSchema = z
+  .object({
+    version: z.number(),
+    splice: spliceSchema,
+    composeProjectName: z.string().min(1, 'composeProjectName must be a non-empty string'),
+    dockerNetwork: z.string().min(1, 'dockerNetwork must be a non-empty string'),
+    persistence: persistenceSchema,
+    validators: validatorsSchema,
+    networkTools: networkToolsSchema,
+  })
+  .strict();
+
+// Parses and validates raw config against the target schema, with no filesystem
+// or Splice-checkout side effects, so it can be unit tested directly.
+export function parseConfig(raw) {
+  // Check the config version before schema validation so an outdated file yields
+  // an actionable upgrade message instead of a generic field error.
+  if (raw?.version !== CONFIG_VERSION) {
     throw new Error(
-      `Config version ${raw.version ?? 'missing'} is not compatible with this version of canton-barebones (expected ${CONFIG_VERSION}).\n` +
-      'Run "canton-barebones init --force" to get the new defaults, then re-apply your changes.'
+      `Config version ${raw?.version ?? 'missing'} is not compatible with this version of canton-barebones (expected ${CONFIG_VERSION}).\n` +
+        'Run "canton-barebones init --force" to get the new defaults, then re-apply your changes.'
     );
   }
 
-  assertGithubRepo(raw.splice?.repo, 'splice.repo');
-  assertString(raw.splice?.tag, 'splice.tag');
-  assertString(raw.composeProjectName, 'composeProjectName');
-  assertString(raw.dockerNetwork, 'dockerNetwork');
-  assertBoolean(raw.resourceConstraints, 'resourceConstraints');
-
-  if (!Array.isArray(raw.profiles) || raw.profiles.length === 0) {
-    throw new Error('profiles must be a non-empty array');
+  const result = configSchema.safeParse(raw);
+  if (!result.success) {
+    const details = result.error.issues
+      .map(issue => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('\n');
+    throw new Error(`Invalid canton-barebones.config.json:\n${details}`);
   }
 
-  for (const profile of raw.profiles) {
-    assertString(profile, 'profiles[]');
-  }
+  return result.data;
+}
 
-  const persistenceMode = raw.persistence?.mode;
-  if (persistenceMode !== 'persistent' && persistenceMode !== 'ephemeral') {
-    throw new Error('persistence.mode must be either "persistent" or "ephemeral"');
-  }
+// Loads canton-barebones.config.json from the project directory, validates it,
+// and resolves all runtime paths and the pinned Splice checkout. Mapping the
+// config onto compose profiles/env/overrides lives in compose.js, next to the
+// Docker Compose invocation it drives.
+export function loadConfig() {
+  assertFileExists(configPath, 'Config file (run "canton-barebones init" first)');
+
+  const parsed = parseConfig(readJson(configPath));
 
   const resolved = {
-    ...raw,
-    imageTag: raw.imageTag ?? raw.splice.tag,
+    ...parsed,
+    imageTag: parsed.splice.tag,
     configPath,
     generatedDir: resolveFromProject('.generated'),
     localnetOverridePath: resolveFromProject('splice-localnet-overrides.yaml'),
@@ -100,10 +168,10 @@ export function validateLocalnetFiles(config) {
   assertFileExists(path.resolve(config.localnetEnvDir, 'postgres.env'), 'LocalNet postgres.env');
   assertFileExists(path.resolve(config.localnetEnvDir, 'splice.env'), 'LocalNet splice.env');
 
-  if (config.resourceConstraints) {
-    assertFileExists(
-      path.resolve(config.localnetDir, 'resource-constraints.yaml'),
-      'LocalNet resource-constraints.yaml'
-    );
-  }
+  // Resource limits are always applied in this dev stack (see compose.js), so the
+  // file must exist.
+  assertFileExists(
+    path.resolve(config.localnetDir, 'resource-constraints.yaml'),
+    'LocalNet resource-constraints.yaml'
+  );
 }
