@@ -116,30 +116,39 @@ So the default config launches the SV plus a headless `appUser`, and each flag y
 
 ## UIs and endpoints
 
-Assuming every flag is on, this is everything the stack exposes. Each participant gets its own nginx port (`sv` 4000, `app-provider` 3000, `app-user` 2000); the same hostnames (`wallet`, `ans`, `canton`, …) are reused per port. UIs only appear when that validator's `ui: true`; the SV is always on. All `*.localhost` names resolve to `127.0.0.1` automatically.
+Assuming every flag is on, this is everything the stack exposes. Each participant gets its own nginx port (`sv` 4000, `app-provider` 3000, `app-user` 2000), and its web UIs and ledger APIs are reached through hostnames on that port. A validator's routes only appear when its `ui: true`; the SV is always on. All `*.localhost` names resolve to `127.0.0.1` automatically.
+
+> In **headless** mode (`enabled: true, ui: false`) a validator's nginx routes below are not exposed. Reach its ledger API on the direct participant ports instead: JSON on `<prefix>975`, gRPC on `<prefix>901`, where the prefix is `2`/`3`/`4` — e.g. `localhost:2975` (JSON) and `localhost:2901` (gRPC) for app-user.
 
 ### SV (port 4000, always on)
 
-| UI                      | URL                          |
-| ----------------------- | ---------------------------- |
-| Landing page            | http://localhost:4000        |
-| SV operations dashboard | http://sv.localhost:4000     |
-| Scan (network explorer) | http://scan.localhost:4000   |
-| Wallet                  | http://wallet.localhost:4000 |
+| Surface                 | URL                                       |
+| ----------------------- | ----------------------------------------- |
+| SV operations dashboard | http://sv.localhost:4000                  |
+| Scan (network explorer) | http://scan.localhost:4000                |
+| Wallet                  | http://wallet.localhost:4000              |
+| JSON Ledger API         | http://canton.localhost:4000/v2           |
+| OpenAPI spec            | http://canton.localhost:4000/docs/openapi |
 
 ### app-user (port 2000, requires `validators.appUser.ui: true`)
 
-| UI                 | URL                                                     |
-| ------------------ | ------------------------------------------------------- |
-| Wallet             | http://wallet.localhost:2000 (or http://localhost:2000) |
-| ANS (name service) | http://ans.localhost:2000                               |
+| Surface            | URL                                                                     |
+| ------------------ | ----------------------------------------------------------------------- |
+| Wallet             | http://wallet.localhost:2000                                            |
+| ANS (name service) | http://ans.localhost:2000                                               |
+| JSON Ledger API    | http://json-ledger-api.localhost:2000 (or http://canton.localhost:2000) |
+| gRPC Ledger API    | grpc-ledger-api.localhost:2000 (http2)                                  |
+| OpenAPI spec       | http://canton.localhost:2000/docs/openapi                               |
 
 ### app-provider (port 3000, requires `validators.appProvider.ui: true`)
 
-| UI                 | URL                          |
-| ------------------ | ---------------------------- |
-| Wallet             | http://wallet.localhost:3000 |
-| ANS (name service) | http://ans.localhost:3000    |
+| Surface            | URL                                                                     |
+| ------------------ | ----------------------------------------------------------------------- |
+| Wallet             | http://wallet.localhost:3000                                            |
+| ANS (name service) | http://ans.localhost:3000                                               |
+| JSON Ledger API    | http://json-ledger-api.localhost:3000 (or http://canton.localhost:3000) |
+| gRPC Ledger API    | grpc-ledger-api.localhost:3000 (http2)                                  |
+| OpenAPI spec       | http://canton.localhost:3000/docs/openapi                               |
 
 ### Network tools
 
@@ -149,31 +158,21 @@ Assuming every flag is on, this is everything the stack exposes. Each participan
 | Canton console                   | interactive container, no web UI (`docker attach console`) | `networkTools.console`   |
 | Multi-sync                       | no UI (adds a second local synchronizer)                   | `networkTools.multiSync` |
 
-### Ledger APIs (per validator, not UIs)
-
-Exposed through the same nginx port as each validator (`sv` 4000, `app-provider` 3000, `app-user` 2000):
-
-| Endpoint        | URL                                                                       |
-| --------------- | ------------------------------------------------------------------------- |
-| JSON Ledger API | http://json-ledger-api.localhost:PORT (also http://canton.localhost:PORT) |
-| gRPC Ledger API | grpc-ledger-api.localhost:PORT (http2)                                    |
-| OpenAPI spec    | http://canton.localhost:PORT/docs/openapi                                 |
-
 ## CLI reference
 
 The binary is `canton-barebones <command>`; the `npm run <command>` scripts wrap it. To pass a flag through npm, add `--` first (e.g. `npm run validate -- --json`).
 
-| Command             | What it does                                                                    | Side effects                                                                    | Docker |
-| ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------ |
-| `init [--force]`    | Scaffold the config and compose override into the project                        | Writes `canton-barebones.config.json` and `splice-localnet-overrides.yaml` (existing files are skipped unless `--force`) | no     |
-| `setup`             | Download the pinned Splice LocalNet source                                       | Writes `.generated/splice/…` on first run                                        | no     |
-| `validate`          | Validate the config and resolved Splice paths                                    | Writes `.generated/localnet.env`; downloads Splice on first run                  | no     |
-| `start`             | Start the stack (`docker compose up -d`)                                         | Starts containers, creates volumes and the Docker network                       | yes    |
-| `stop`              | Stop containers, keep volumes (`docker compose down`)                            | Removes containers; data volumes are preserved                                  | yes    |
-| `reset`             | Stop containers and remove volumes (`docker compose down -v`)                    | **Deletes all stack data**                                                       | yes    |
-| `status`            | Show service status (`docker compose ps`)                                        | none                                                                             | yes    |
-| `logs [args…]`      | Show logs (`docker compose logs`); extra args pass through                       | none                                                                             | yes    |
-| `compose <args…>`   | Run docker compose with the configured LocalNet files; **no args prints the computed docker command** (dry run) | depends on the args                                            | yes    |
+| Command           | What it does                                                                                                    | Side effects                                                                                                             | Docker |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------ |
+| `init [--force]`  | Scaffold the config and compose override into the project                                                       | Writes `canton-barebones.config.json` and `splice-localnet-overrides.yaml` (existing files are skipped unless `--force`) | no     |
+| `setup`           | Download the pinned Splice LocalNet source                                                                      | Writes `.generated/splice/…` on first run                                                                                | no     |
+| `validate`        | Validate the config and resolved Splice paths                                                                   | Writes `.generated/localnet.env`; downloads Splice on first run                                                          | no     |
+| `start`           | Start the stack (`docker compose up -d`)                                                                        | Starts containers, creates volumes and the Docker network                                                                | yes    |
+| `stop`            | Stop containers, keep volumes (`docker compose down`)                                                           | Removes containers; data volumes are preserved                                                                           | yes    |
+| `reset`           | Stop containers and remove volumes (`docker compose down -v`)                                                   | **Deletes all stack data**                                                                                               | yes    |
+| `status`          | Show service status (`docker compose ps`)                                                                       | none                                                                                                                     | yes    |
+| `logs [args…]`    | Show logs (`docker compose logs`); extra args pass through                                                      | none                                                                                                                     | yes    |
+| `compose <args…>` | Run docker compose with the configured LocalNet files; **no args prints the computed docker command** (dry run) | depends on the args                                                                                                      | yes    |
 
 **Exit codes & output.** Every command exits `0` on success and `1` on failure, printing the error message to stderr.
 
@@ -208,22 +207,22 @@ Non-obvious behaviors worth knowing before automating against the stack:
 
 ## Troubleshooting
 
-| Symptom                                                    | Cause                                                                        | Fix                                                                                    |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `Config version N is not compatible …`                     | The config predates the current schema                                      | `init --force` to get the new defaults, then re-apply your edits                        |
-| `Invalid canton-barebones.config.json: …`                  | A field is missing, mistyped, or the wrong type (the message names the path) | Fix the named field and re-run                                                          |
-| `docker is required to run the stack`                      | Docker is not installed or not running                                       | Install / start Docker, then retry                                                      |
-| Port already in use (e.g. `2000`, `4903`, `5432`)          | Another stack (or the same one) is already up on that port                   | `stop` the running stack, or free the port                                             |
-| Containers are up but a participant does not respond       | A bound port is not the same as a live backend                              | Check `readyz` (see [Verifying the stack](#verifying-the-stack))                        |
-| Stale or corrupted state after config churn                | Volumes hold old data                                                        | `reset` to wipe volumes, then `start`                                                   |
-| Anything under `.generated/` looks wrong                   | It is disposable                                                             | Delete `.generated/` — it is rebuilt on the next `start`                                |
+| Symptom                                              | Cause                                                                        | Fix                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `Config version N is not compatible …`               | The config predates the current schema                                       | `init --force` to get the new defaults, then re-apply your edits |
+| `Invalid canton-barebones.config.json: …`            | A field is missing, mistyped, or the wrong type (the message names the path) | Fix the named field and re-run                                   |
+| `docker is required to run the stack`                | Docker is not installed or not running                                       | Install / start Docker, then retry                               |
+| Port already in use (e.g. `2000`, `4903`, `5432`)    | Another stack (or the same one) is already up on that port                   | `stop` the running stack, or free the port                       |
+| Containers are up but a participant does not respond | A bound port is not the same as a live backend                               | Check `readyz` (see [Verifying the stack](#verifying-the-stack)) |
+| Stale or corrupted state after config churn          | Volumes hold old data                                                        | `reset` to wipe volumes, then `start`                            |
+| Anything under `.generated/` looks wrong             | It is disposable                                                             | Delete `.generated/` — it is rebuilt on the next `start`         |
 
 ## Development
 
 ### Source layout
 
 | File                      | Responsibility                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `bin/canton-barebones.js` | CLI entry point: parses the command and `--json`, dispatches to `src/*`                              |
 | `src/config.js`           | Loads and zod-validates the config; resolves runtime paths and the pinned Splice checkout            |
 | `src/compose.js`          | Turns the config into the Docker Compose invocation (profiles, env, generated overrides) and runs it |
@@ -234,9 +233,9 @@ Non-obvious behaviors worth knowing before automating against the stack:
 
 ### Testing
 
-| Command            | What it runs                                                                                                  | Needs Docker              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| `npm test`         | Unit tests (`node --test` over `scripts/**/*.test.js`) — config schema validation and the runtime plan       | no                        |
+| Command            | What it runs                                                                                                             | Needs Docker              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| `npm test`         | Unit tests (`node --test` over `scripts/**/*.test.js`) — config schema validation and the runtime plan                   | no                        |
 | `npm run test:e2e` | Smoke test (`scripts/smoke.js`) — resolves the default config (SV + headless `appUser`) and drives a valid compose model | yes (+ a Splice checkout) |
 
 Run `npm test` for a fast check without Docker; run `npm run test:e2e` to exercise the full compose model end to end.
