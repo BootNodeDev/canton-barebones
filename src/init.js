@@ -31,5 +31,6 @@ export function init({ force = false } = {}) {
     console.log(`${force ? 'overwritten' : 'created'}: ${dest}`);
   }
 
-  console.log('\nRun "canton-barebones start" to launch the stack.');
+  console.log('\nInit completed ✅');
+  console.log('To launch the Canton LocalNet stack, run the "start" command.');
 }
