@@ -1,5 +1,5 @@
 {
-  "name": "@bootnode/canton-barebones",
+  "name": "@bootnodedev/cbn",
   "version": "0.1.0",
   "type": "module",
   "description": "Barebones one-click Canton developer stack.",
