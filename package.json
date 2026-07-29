@@ -23,12 +23,17 @@
     "compose": "node ./bin/canton-barebones.js compose",
     "compose:config": "node ./bin/canton-barebones.js compose config",
     "test": "node --test \"scripts/**/*.test.js\"",
-    "test:e2e": "node ./bin/canton-barebones.js init && node ./scripts/smoke.js"
+    "test:e2e": "node ./bin/canton-barebones.js init && node ./scripts/smoke.js",
+    "changeset": "changeset",
+    "release": "changeset publish"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.1"
   }
 }

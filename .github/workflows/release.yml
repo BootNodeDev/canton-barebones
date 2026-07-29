@@ -1,0 +1,45 @@
+# Publishes @bootnodedev/cbn to npm via Changesets.
+#
+# Flow: every push to main runs this. The changesets action either
+#   (a) opens/updates a "Version Packages" PR when unreleased changesets exist, or
+#   (b) publishes to npm when that PR was merged (i.e. package.json version bumped).
+# Nothing is published on a normal merge — only when the Version Packages PR lands.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Avoid two release runs racing on the same ref (e.g. rapid merges).
+concurrency: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create tags / GitHub releases and push the Version Packages PR
+      pull-requests: write # open and update the Version Packages PR
+      id-token: write # npm provenance (signed, verifiable publish origin)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # changesets needs full history to compute versions
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org # writes the auth line npm publish needs
+
+      - run: npm ci
+
+      # Gate: unit tests must pass before anything is published.
+      - run: npm test
+
+      - name: Create Version PR or publish
+        uses: changesets/action@v1
+        with:
+          publish: npm run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true" # attach provenance attestation on publish

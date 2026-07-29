@@ -1,0 +1,28 @@
+# Fails a PR that changes the package but carries no changeset.
+#
+# Mark this job as a required status check in branch protection so a PR
+# cannot merge without declaring its version intent. For PRs that don't
+# affect the published package (docs, CI, chores), add an empty changeset:
+#   npx changeset --empty
+name: Changeset check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  changeset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed to diff the PR against the base branch
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      # Exits non-zero when no changeset exists for the changes since main.
+      - run: npx changeset status --since=origin/main

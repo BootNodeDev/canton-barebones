@@ -240,6 +240,25 @@ Non-obvious behaviors worth knowing before automating against the stack:
 
 Run `npm test` for a fast check without Docker; run `npm run test:e2e` to exercise the full compose model end to end.
 
+### Releasing
+
+Versioning and npm publishing are automated with [Changesets](https://github.com/changesets/changesets). You never bump the version or run `npm publish` by hand.
+
+| Command             | What it does                                                                                     | Who runs it              |
+| ------------------- | ------------------------------------------------------------------------------------------------ | ------------------------ |
+| `npm run changeset` | Interactive CLI: asks the bump type (patch/minor/major) and a summary, writes `.changeset/*.md`  | you, in your branch      |
+| `npm run release`   | `changeset publish` — publishes bumped packages to npm and creates git tags                      | CI only (`release.yml`)  |
+
+End-to-end flow:
+
+1. **Make your change** in a branch. Before opening the PR, run `npm run changeset` and commit the generated `.changeset/*.md` alongside your code. It records _what kind_ of release your change is — not the version number.
+   - A PR that doesn't affect the published package (docs, CI, chores) still needs one: run `npx changeset --empty`. The `changeset-check` workflow fails a PR that has no changeset.
+2. **Merge the PR to `main`.** This does **not** publish anything. The version stays put.
+3. **A bot opens a "Version Packages" PR** (via `release.yml`). It consumes the pending changesets, bumps the version in `package.json`, and updates `CHANGELOG.md`. It keeps this PR up to date as more changesets land on `main`.
+4. **Merge the "Version Packages" PR when you want to cut a release.** That merge triggers `release.yml` to run `npm run release`, publishing to npm with provenance and creating the git tag.
+
+In short: changesets accumulate on `main` without publishing; you publish by merging the bot's Version Packages PR. Batch several changes into one release, or ship them one at a time.
+
 ## Design notes
 
 Deeper mechanics, not needed for day-to-day use.
