@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Barebones one-click Canton developer stack.",
   "bin": {
-    "canton-barebones": "./bin/canton-barebones.js"
+    "canton-barebones": "bin/canton-barebones.js"
   },
   "files": [
     "bin/",
