@@ -12,6 +12,9 @@ on:
 
 jobs:
   changeset:
+    # The bot's "Version Packages" PR (changesets/action) consumes the pending
+    # changesets, so by design it carries none — skip the check for it.
+    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
