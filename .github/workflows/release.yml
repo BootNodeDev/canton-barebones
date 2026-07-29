@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: write # create tags / GitHub releases and push the Version Packages PR
       pull-requests: write # open and update the Version Packages PR
-      id-token: write # npm provenance (signed, verifiable publish origin)
+      id-token: write # npm trusted publishing (OIDC) and provenance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +28,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org # writes the auth line npm publish needs
+
+      # Publishing uses npm trusted publishing (OIDC) — the trusted publisher is
+      # configured on npmjs.com for this repo/workflow, so no NPM_TOKEN is needed
+      # and provenance is attached automatically. It requires npm >= 11.5.1,
+      # while node 22 ships npm 10.
+      - run: npm install -g npm@latest
 
       - run: npm ci
 
@@ -41,5 +46,3 @@ jobs:
           publish: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true" # attach provenance attestation on publish
