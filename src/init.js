@@ -33,4 +33,14 @@ export function init({ force = false } = {}) {
 
   console.log('\nInit completed ✅');
   console.log('To launch the Canton LocalNet stack, run the "start" command.');
+  console.log('\nNotes:');
+  console.log(
+    '  - Edit canton-barebones.config.json to turn Canton services on/off (validators, UIs, network tools).'
+  );
+  console.log('  - After changing the config, re-run "start" for the changes to take effect.');
+  console.log('  - Run "validate" after editing the config to catch mistakes before starting Docker.');
+  console.log('  - The first "start" downloads the pinned Splice source, so it may take a while.');
+  console.log('  - splice-localnet-overrides.yaml holds advanced Docker Compose tweaks; most setups never touch it.');
+  console.log('  - Ledger data persists in Docker volumes across restarts; run "reset" to wipe it for a clean slate.');
+  console.log('  - Docs: https://github.com/BootNodeDev/canton-barebones#readme');
 }
