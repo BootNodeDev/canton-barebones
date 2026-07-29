@@ -1,6 +1,6 @@
 {
   "name": "@bootnodedev/cbn",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Barebones one-click Canton developer stack.",
   "bin": {
