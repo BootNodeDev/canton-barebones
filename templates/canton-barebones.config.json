@@ -19,6 +19,11 @@
       "ui": false
     }
   },
+  "sv": {
+    "scanUI": true,
+    "svUI": true,
+    "walletUI": true
+  },
   "networkTools": {
     "console": false,
     "multiSync": false,
