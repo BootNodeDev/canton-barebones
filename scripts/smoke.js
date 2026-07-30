@@ -20,6 +20,7 @@ assert.deepEqual(config.validators, {
   appProvider: { enabled: false, ui: false },
   appUser: { enabled: true, ui: false },
 });
+assert.deepEqual(config.sv, { scanUI: true, svUI: true, walletUI: true });
 assert.deepEqual(config.networkTools, { console: false, multiSync: false, swaggerUI: false });
 
 // With the scaffolded default (app-provider off, app-user enabled headless, tools
@@ -30,6 +31,8 @@ assert.deepEqual(config.networkTools, { console: false, multiSync: false, swagge
 const plan = deriveRuntimePlan(config);
 assert.deepEqual(plan.upProfiles, ['sv']);
 assert.deepEqual(plan.headlessValidators, ['appUser']);
+// All SV web UIs are on by default, so nothing is pinned to 0 replicas.
+assert.deepEqual(plan.disabledSvUIs, []);
 assert.equal(runtimeEnvPath.endsWith('.generated/localnet.env'), true);
 assert.equal(config.localnetOverridePath.endsWith('splice-localnet-overrides.yaml'), true);
 assert.match(localnetOverride, /max-size: "25m"/);
