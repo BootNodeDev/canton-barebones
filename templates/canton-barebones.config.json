@@ -20,9 +20,9 @@
     }
   },
   "sv": {
-    "scanUI": true,
-    "svUI": true,
-    "walletUI": true
+    "scanUI": false,
+    "svUI": false,
+    "walletUI": false
   },
   "networkTools": {
     "console": false,
