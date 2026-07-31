@@ -24,7 +24,7 @@ function assertRejects(raw, expectedFragment) {
 
 // The scaffolded default shipped by `init`: version 1, a pinned Splice source,
 // persistent volumes, app-provider off, app-user enabled headless (backend on,
-// UIs off), every SV web UI on (the SV backend itself is not in the config — it
+// UIs off), every SV web UI flag present (the SV backend itself is not in the config — it
 // is required infrastructure that always runs), and all network tools off. This
 // is the baseline; every negative case below clones it and breaks a single rule,
 // so a failure points to one validation concern.

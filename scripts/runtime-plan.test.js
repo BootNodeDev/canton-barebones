@@ -10,7 +10,9 @@ import { deriveRuntimePlan, writeLocalnetEnv } from '../src/compose.js';
 // writeLocalnetEnv read: the validator flags, the SV UI flags, the network tool
 // flags, the identifiers echoed into the env file, and a directory to generate
 // into. The baseline mirrors the scaffolded default — app-provider off, app-user
-// headless, all SV UIs on, tools off — and each case below flips one lever.
+// headless, tools off — and each case below flips one lever. The SV UIs are all
+// on here (the scaffolded default ships them off) so the negative cases can
+// disable flags one at a time from a fully-on baseline.
 function baseConfig(generatedDir) {
   return {
     imageTag: '0.6.11',
