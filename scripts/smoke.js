@@ -29,7 +29,8 @@ assert.deepEqual(config.networkTools, { console: false, multiSync: false, swagge
 // off), only the SV profile is started: a headless validator adds no `--profile`
 // (its backend is switched via env), so `upProfiles` stays `['sv']`. That profile
 // also brings up the shared postgres/canton/splice/nginx. app-user being headless
-// means it lands in `headlessValidators`, which triggers the generated nginx override.
+// means it lands in `headlessValidators`, and the static runtime override blanks
+// its nginx routes: APP_USER_NGINX_ROUTES points at the empty routes file.
 const plan = deriveRuntimePlan(config);
 assert.deepEqual(plan.upProfiles, ['sv']);
 assert.deepEqual(plan.headlessValidators, ['appUser']);

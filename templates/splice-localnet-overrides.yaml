@@ -5,28 +5,12 @@
 # static file only sets log rotation. It is scaffolded into your project by `init`,
 # so you can add your own tweaks here.
 #
-# There is also a SECOND, GENERATED override at .generated/service-overrides.yaml
-# that the wrapper rewrites on every run (do not edit it). It runs "headless"
-# validators — backend on, UIs off — and it works by exploiting the same merge:
-#
-#   - nginx (the nginx Docker image) renders every /etc/nginx/templates/*.template
-#     through envsubst into /etc/nginx/conf.d/ at startup.
-#   - Splice mounts each validator's routing config there, e.g.
-#       conf/nginx/app-user.conf -> /etc/nginx/templates/app-user.conf.template
-#     and that config proxies to the validator's UI containers as fixed upstreams.
-#     If those UI containers are not running, nginx fails to start.
-#   - Compose deduplicates volume mounts by their target path, and the LAST `-f`
-#     wins. So the generated override mounts an EMPTY file over the exact same
-#     target (app-user.conf.template). nginx then renders an empty config, adds no
-#     routes for that validator, and starts fine — while the validator's backend
-#     still runs and stays reachable on its direct API ports.
-#
-# See src/compose.js (deriveRuntimePlan / writeGeneratedOverride) for how it is built.
-#
-# Finally, a THIRD, STATIC override ships inside the canton-barebones package
-# (templates/runtime-overrides.yaml, always applied before this file): it turns
-# the `sv` config flags into 0-replica pins and nginx aliases for the SV web UIs,
-# driven purely by env vars. See that file's header for the full detail.
+# There is also a SECOND, STATIC override shipped inside the canton-barebones
+# package (templates/runtime-overrides.yaml, always applied right before this
+# file): driven purely by env vars from .generated/localnet.env, it blanks a
+# headless validator's nginx route template and turns the `sv` config flags into
+# 0-replica pins and nginx aliases for the SV web UIs. See that file's header for
+# the full mechanics, and writeLocalnetEnv in src/compose.js for the env values.
 services:
   postgres:
     logging: &default-logging

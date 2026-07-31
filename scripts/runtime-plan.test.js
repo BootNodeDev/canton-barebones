@@ -71,6 +71,37 @@ describe('deriveRuntimePlan sv UI flags', () => {
   });
 });
 
+// Scenario: the validator route-source env vars. templates/runtime-overrides.yaml
+// statically mounts `${*_NGINX_ROUTES}` over each validator's nginx route
+// template, so the var's value decides what nginx renders: Splice's real routing
+// config when the UI is on, or an empty file — no routes, so nginx never tries
+// to resolve UI containers that are not running (headless or disabled validators).
+describe('writeLocalnetEnv validator route sources', () => {
+  // The scaffolded default: app-user enabled without UI (headless) and
+  // app-provider fully disabled. Both must get the empty routes file, because in
+  // both cases the validator's UI containers do not run.
+  it('points ui-less validators at the empty routes file', () => {
+    const env = readEnvFile(writeLocalnetEnv(baseConfig(generatedDir)));
+    assert.equal(env.APP_USER_NGINX_ROUTES.endsWith('empty-nginx-routes.conf'), true);
+    assert.equal(env.APP_PROVIDER_NGINX_ROUTES, env.APP_USER_NGINX_ROUTES);
+    // The mount source must exist and be empty, or docker would create a
+    // directory in its place / nginx would render stale routes.
+    assert.equal(fs.existsSync(env.APP_USER_NGINX_ROUTES), true);
+    assert.equal(fs.readFileSync(env.APP_USER_NGINX_ROUTES, 'utf8'), '');
+  });
+
+  // A validator with its UI on must mount Splice's real routing config — the
+  // exact file Splice's own compose mounts — so its routes stay identical.
+  it("points a ui-enabled validator at Splice's real routing config", () => {
+    const config = baseConfig(generatedDir);
+    config.validators.appUser = { enabled: true, ui: true };
+    const env = readEnvFile(writeLocalnetEnv(config));
+    // baseConfig pins localnetDir to /tmp/localnet, so the resolved source is
+    // that checkout's nginx config for app-user.
+    assert.equal(env.APP_USER_NGINX_ROUTES, '/tmp/localnet/conf/nginx/app-user.conf');
+  });
+});
+
 // Scenario: the SV UI env vars. templates/runtime-overrides.yaml is static and
 // consumes one replicas + alias pair per UI, so these vars ARE the runtime
 // contract: replicas 0/1 decides whether the container starts, and the alias
