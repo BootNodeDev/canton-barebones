@@ -112,8 +112,8 @@ Rules:
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | always                   | `--profile sv` runs the SV fully and, with it, the shared postgres/canton/splice/nginx                              |
 | `validators.*.enabled`   | switches that validator's backend on/off via an env var                                                             |
-| `validators.*.ui`        | on → also starts that validator's UIs; off (but enabled) → nginx is told to skip that validator so it runs headless |
-| an `sv` UI flag off      | env vars pin that UI to 0 replicas and alias its hostname onto nginx (static `templates/runtime-overrides.yaml`)    |
+| `validators.*.ui`        | on → also starts that validator's UIs; off (but enabled) → an env var blanks its nginx routes so it runs headless   |
+| an `sv` UI flag off      | env vars pin that UI to 0 replicas and alias its hostname onto nginx                                                |
 | a `networkTools` flag on | starts that tool via its profile                                                                                    |
 
 So the default config launches the SV plus a headless `appUser`, and each flag you flip adds more. (For _why_ a headless validator needs special handling, see [Design notes](#design-notes).)
@@ -231,7 +231,7 @@ Non-obvious behaviors worth knowing before automating against the stack:
 | ------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `bin/canton-barebones.js` | CLI entry point: parses the command and `--json`, dispatches to `src/*`                              |
 | `src/config.js`           | Loads and zod-validates the config; resolves runtime paths and the pinned Splice checkout            |
-| `src/compose.js`          | Turns the config into the Docker Compose invocation (profiles, env, generated overrides) and runs it |
+| `src/compose.js`          | Turns the config into the Docker Compose invocation (profiles, env vars, override chain) and runs it |
 | `src/splice.js`           | Downloads and pins the Splice LocalNet source into `.generated/`                                     |
 | `src/init.js`             | Scaffolds the bundled templates into the project (`init`)                                            |
 | `src/output.js`           | Centralizes CLI output: human text vs `--json`, stdout vs stderr                                     |
@@ -277,20 +277,21 @@ Running a validator with its backend on but its UIs off (`enabled: true, ui: fal
 2. Splice mounts each validator's routing config there (e.g. `app-user.conf` → `/etc/nginx/templates/app-user.conf.template`). That config proxies to the validator's UI containers as fixed upstreams, and nginx **refuses to start** if an upstream host does not exist.
 3. Because the validator's backend is on, Splice renders its nginx config — so nginx would look for UI containers that we did not start, and crash.
 
-CantonBarebones works around this without editing any Splice file. Docker Compose deduplicates volume mounts by their target path, and the **last `-f` wins**. So the wrapper writes a generated override (`.generated/service-overrides.yaml`, passed last) that mounts an **empty file** over that exact template path:
+CantonBarebones works around this without editing any Splice file and without generating YAML. Docker Compose deduplicates volume mounts by their target path, and the **later `-f` wins**. The static override shipped inside the package (`templates/runtime-overrides.yaml`, always applied after Splice's files) mounts an env-var-selected **source file** over that exact template path:
 
 ```
-Splice:            conf/nginx/app-user.conf → /etc/nginx/templates/app-user.conf.template
-Generated override: (empty file)            → /etc/nginx/templates/app-user.conf.template   ← wins
+Splice:          conf/nginx/app-user.conf   → /etc/nginx/templates/app-user.conf.template
+Static override: ${APP_USER_NGINX_ROUTES}   → /etc/nginx/templates/app-user.conf.template   ← wins
 
-nginx renders an empty app-user.conf → no routes for it → starts fine.
+ui: true  → the var points at Splice's own app-user.conf → identical routes, nothing changes.
+ui: false → it points at an empty file in .generated/ → nginx renders no routes → starts fine.
 ```
 
-The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/splice-localnet-overrides.yaml` and `src/compose.js` for the full detail.
+The wrapper only writes the `APP_*_NGINX_ROUTES` env vars to `.generated/localnet.env`. The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/runtime-overrides.yaml` and `writeLocalnetEnv` in `src/compose.js` for the full detail.
 
 ### How a disabled SV web UI works (replicas + alias)
 
-Turning off an SV web UI (`sv.scanUI` / `sv.svUI` / `sv.walletUI`) cannot reuse the empty-template trick above: Splice's `sv.conf` mixes the UI routes with **API routes** (scan API, SV admin API, canton JSON API) that proxy to the always-running `splice`/`canton` containers and must stay up, and the flags are per-UI rather than all-or-nothing. Instead, a **static** override shipped inside the package (`templates/runtime-overrides.yaml`, always applied) uses two other compose levers, driven purely by env vars that the wrapper writes to `.generated/localnet.env`:
+Turning off an SV web UI (`sv.scanUI` / `sv.svUI` / `sv.walletUI`) cannot reuse the empty-template trick above: Splice's `sv.conf` mixes the UI routes with **API routes** (scan API, SV admin API, canton JSON API) that proxy to the always-running `splice`/`canton` containers and must stay up, and the flags are per-UI rather than all-or-nothing. The same static override uses two other compose levers instead, also driven by env vars from `.generated/localnet.env`:
 
 1. `deploy.replicas: ${…_REPLICAS}` — `0` for a disabled UI, so compose never starts its container. (An override entry rather than `docker compose --scale`, which errors for services whose profile is not selected.)
 2. nginx still resolves that UI's hostname at startup (`proxy_pass http://scan-web-ui:8080/` …) and would crash with "host not found in upstream" once no container owns the name. So nginx carries a **network alias** per UI whose _value_ comes from `${…_NGINX_ALIAS}`: for a disabled UI it is the real hostname — the name resolves onto the nginx container itself, nginx boots, and since nothing there listens on the UI port, browsing the disabled UI answers **502** while every API route on port 4000 keeps working. For an enabled UI it is an inert `<name>-unused` (static YAML has no conditionals, so the list entry always exists and only its value changes).

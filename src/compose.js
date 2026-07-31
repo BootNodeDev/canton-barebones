@@ -9,12 +9,14 @@
 //     and nginx.
 //   - Each validator's backend switches on/off via an env var (*_PROFILE).
 //   - A validator with its backend on but UIs off would still make nginx try to
-//     route to its (absent) UIs and fail. To run it headless we blank out its
-//     nginx route with a generated override (see writeGeneratedOverride).
+//     route to its (absent) UIs and fail. To run it headless its nginx route
+//     template is blanked out with an empty file.
 //   - The SV's web UIs ride the always-on `sv` profile, so turning one off is not
-//     a profile decision either: a static override shipped with this package
-//     (templates/runtime-overrides.yaml) pins it to 0 replicas and keeps nginx
-//     bootable, driven purely by env vars written here (see writeLocalnetEnv).
+//     a profile decision either: the disabled UI is pinned to 0 replicas while
+//     nginx keeps its hostname resolvable.
+// Both UI levers live in a static override shipped with this package
+// (templates/runtime-overrides.yaml, see its header for the mechanics), driven
+// purely by env vars written here (see writeLocalnetEnv).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -27,14 +29,6 @@ export const allLocalnetProfiles = ['app-provider', 'app-user', 'sv', 'swagger-u
 
 // Compose profile that starts each validator's UI bundle.
 const PARTICIPANT_PROFILE = { appProvider: 'app-provider', appUser: 'app-user' };
-
-// nginx template file (inside the container) that holds each validator's routes.
-// Blanking it out with an empty file makes nginx skip that validator, so it can
-// run headless without nginx failing on the missing UI upstreams.
-const NGINX_ROUTE_TEMPLATE = {
-  appProvider: '/etc/nginx/templates/app-provider.conf.template',
-  appUser: '/etc/nginx/templates/app-user.conf.template',
-};
 
 // Compose profile for each network tool.
 const TOOL_PROFILE = { console: 'console', multiSync: 'multi-sync', swaggerUI: 'swagger-ui' };
@@ -61,8 +55,8 @@ function profileFlags(profiles) {
 // - upProfiles: `--profile` flags to start — always `sv` (which also brings up the
 //   shared postgres/canton/splice/nginx), plus a validator's profile when its UIs
 //   are wanted, plus a profile per enabled network tool.
-// - headlessValidators: validators whose backend is on but UIs are off; nginx must
-//   be told to skip their routes (see writeGeneratedOverride).
+// - headlessValidators: validators whose backend is on but UIs are off; nginx is
+//   told to skip their routes via env vars (see writeLocalnetEnv).
 // - disabledSvUIs: SV web UI services turned off in the config; the static
 //   runtime override pins them to 0 replicas via env vars (see writeLocalnetEnv).
 export function deriveRuntimePlan(config) {
@@ -113,6 +107,25 @@ export function writeLocalnetEnv(config) {
 
   const { nodeEnv } = deriveRuntimePlan(config);
 
+  // Mounted as a validator's nginx route template whenever its UI is off
+  // (headless or disabled): empty routes mean nginx has nothing to resolve, so
+  // it boots without that validator's UI containers.
+  const emptyRoutesPath = path.resolve(config.generatedDir, 'empty-nginx-routes.conf');
+  fs.writeFileSync(emptyRoutesPath, '');
+
+  // The file the static runtime override mounts as a validator's nginx route
+  // template: Splice's real routing config when the UI is on (same file Splice
+  // itself mounts, so routes stay identical), the empty file otherwise.
+  const routesSource = (key, confName) =>
+    config.validators[key].ui
+      ? path.resolve(config.localnetDir, 'conf', 'nginx', confName)
+      : emptyRoutesPath;
+
+  const validatorRoutesEnv = [
+    envLine('APP_PROVIDER_NGINX_ROUTES', routesSource('appProvider', 'app-provider.conf')),
+    envLine('APP_USER_NGINX_ROUTES', routesSource('appUser', 'app-user.conf')),
+  ];
+
   // One replicas + alias pair per SV web UI, consumed by the static
   // templates/runtime-overrides.yaml (see its header for how the two work). The
   // env prefix is the service name upper-snake-cased, e.g. SCAN_WEB_UI.
@@ -135,6 +148,7 @@ export function writeLocalnetEnv(config) {
     envLine('SV_PROFILE', nodeEnv.SV_PROFILE),
     envLine('APP_PROVIDER_PROFILE', nodeEnv.APP_PROVIDER_PROFILE),
     envLine('APP_USER_PROFILE', nodeEnv.APP_USER_PROFILE),
+    ...validatorRoutesEnv,
     ...svUiEnv,
     '',
   ].join('\n');
@@ -143,35 +157,10 @@ export function writeLocalnetEnv(config) {
   return runtimeEnvPath;
 }
 
-// Writes a generated compose override that runs headless validators (backend on,
-// UIs off) by replacing their nginx route template with an empty file. Without
-// this, nginx would try to route to those validators' absent UI containers and
-// fail to start. Docker Compose merges volume mounts by target path with the last
-// file winning, so mounting our empty file over Splice's template neutralizes it.
-// Returns the path when an override is needed, or null otherwise (so no file is
-// passed to -f when nothing is headless).
-export function writeGeneratedOverride(config, headlessValidators) {
-  const overridePath = path.resolve(config.generatedDir, 'service-overrides.yaml');
-  if (headlessValidators.length === 0) {
-    fs.rmSync(overridePath, { force: true });
-    return null;
-  }
-  fs.mkdirSync(config.generatedDir, { recursive: true });
-  const emptyTemplatePath = path.resolve(config.generatedDir, 'empty-nginx-template');
-  fs.writeFileSync(emptyTemplatePath, '');
-  const mounts = headlessValidators
-    .map(key => `      - ${emptyTemplatePath}:${NGINX_ROUTE_TEMPLATE[key]}\n`)
-    .join('');
-  const contents = `# Generated from canton-barebones.config.json — do not edit.\n# These validators run their backend but not their UIs. nginx would otherwise try\n# to route to the missing UI containers and fail to start, so their nginx route\n# templates are replaced with an empty file.\nservices:\n  nginx:\n    volumes:\n${mounts}`;
-  fs.writeFileSync(overridePath, contents);
-  return overridePath;
-}
-
 // Builds the docker compose arguments that select Splice LocalNet files and profiles.
 export function dockerComposeArgs(config, options = {}) {
   const runtimeEnvPath = writeLocalnetEnv(config);
   const plan = deriveRuntimePlan(config);
-  const generatedOverridePath = writeGeneratedOverride(config, plan.headlessValidators);
   const profiles = options.profiles ?? plan.upProfiles;
   const args = [
     'compose',
@@ -189,17 +178,13 @@ export function dockerComposeArgs(config, options = {}) {
   // constraints keep it from starving the host and match how Splice runs LocalNet.
   args.push('-f', path.resolve(config.localnetDir, 'resource-constraints.yaml'));
 
-  // The package's static runtime override translates the `sv` UI env vars into
-  // replica pins and nginx aliases; it ships with the package (not scaffolded),
-  // and goes before the user's override so user tweaks can still win the merge.
+  // The package's static runtime override translates the UI env vars into empty
+  // nginx route templates, replica pins, and nginx aliases. It ships with the
+  // package (not scaffolded) and sits after Splice's files — so its mounts win
+  // their merge — but before the user's override, so user tweaks can still win.
   args.push('-f', resolveFromPackage('templates/runtime-overrides.yaml'));
 
   args.push('-f', config.localnetOverridePath);
-
-  // The generated override must come last so its empty nginx templates win the merge.
-  if (generatedOverridePath) {
-    args.push('-f', generatedOverridePath);
-  }
 
   args.push(...profileFlags(profiles));
   return args;

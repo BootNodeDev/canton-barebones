@@ -20,19 +20,22 @@ assert.deepEqual(config.validators, {
   appProvider: { enabled: false, ui: false },
   appUser: { enabled: true, ui: false },
 });
-assert.deepEqual(config.sv, { scanUI: true, svUI: true, walletUI: true });
+// The scaffolded default ships every SV web UI off, matching the barebones
+// philosophy of the rest of the defaults (turn on what you need).
+assert.deepEqual(config.sv, { scanUI: false, svUI: false, walletUI: false });
 assert.deepEqual(config.networkTools, { console: false, multiSync: false, swaggerUI: false });
 
 // With the scaffolded default (app-provider off, app-user enabled headless, tools
 // off), only the SV profile is started: a headless validator adds no `--profile`
 // (its backend is switched via env), so `upProfiles` stays `['sv']`. That profile
 // also brings up the shared postgres/canton/splice/nginx. app-user being headless
-// means it lands in `headlessValidators`, which triggers the generated nginx override.
+// means it lands in `headlessValidators`, and the static runtime override blanks
+// its nginx routes: APP_USER_NGINX_ROUTES points at the empty routes file.
 const plan = deriveRuntimePlan(config);
 assert.deepEqual(plan.upProfiles, ['sv']);
 assert.deepEqual(plan.headlessValidators, ['appUser']);
-// All SV web UIs are on by default, so nothing is pinned to 0 replicas.
-assert.deepEqual(plan.disabledSvUIs, []);
+// All SV web UIs are off by default, so all three are pinned to 0 replicas.
+assert.deepEqual(plan.disabledSvUIs, ['scan-web-ui', 'sv-web-ui', 'wallet-web-ui-sv']);
 assert.equal(runtimeEnvPath.endsWith('.generated/localnet.env'), true);
 assert.equal(config.localnetOverridePath.endsWith('splice-localnet-overrides.yaml'), true);
 assert.match(localnetOverride, /max-size: "25m"/);

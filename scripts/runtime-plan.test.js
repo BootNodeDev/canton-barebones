@@ -10,7 +10,9 @@ import { deriveRuntimePlan, writeLocalnetEnv } from '../src/compose.js';
 // writeLocalnetEnv read: the validator flags, the SV UI flags, the network tool
 // flags, the identifiers echoed into the env file, and a directory to generate
 // into. The baseline mirrors the scaffolded default — app-provider off, app-user
-// headless, all SV UIs on, tools off — and each case below flips one lever.
+// headless, tools off — and each case below flips one lever. The SV UIs are all
+// on here (the scaffolded default ships them off) so the negative cases can
+// disable flags one at a time from a fully-on baseline.
 function baseConfig(generatedDir) {
   return {
     imageTag: '0.6.11',
@@ -66,6 +68,37 @@ describe('deriveRuntimePlan sv UI flags', () => {
     config.sv = { scanUI: false, svUI: true, walletUI: false };
     const plan = deriveRuntimePlan(config);
     assert.deepEqual(plan.disabledSvUIs, ['scan-web-ui', 'wallet-web-ui-sv']);
+  });
+});
+
+// Scenario: the validator route-source env vars. templates/runtime-overrides.yaml
+// statically mounts `${*_NGINX_ROUTES}` over each validator's nginx route
+// template, so the var's value decides what nginx renders: Splice's real routing
+// config when the UI is on, or an empty file — no routes, so nginx never tries
+// to resolve UI containers that are not running (headless or disabled validators).
+describe('writeLocalnetEnv validator route sources', () => {
+  // The scaffolded default: app-user enabled without UI (headless) and
+  // app-provider fully disabled. Both must get the empty routes file, because in
+  // both cases the validator's UI containers do not run.
+  it('points ui-less validators at the empty routes file', () => {
+    const env = readEnvFile(writeLocalnetEnv(baseConfig(generatedDir)));
+    assert.equal(env.APP_USER_NGINX_ROUTES.endsWith('empty-nginx-routes.conf'), true);
+    assert.equal(env.APP_PROVIDER_NGINX_ROUTES, env.APP_USER_NGINX_ROUTES);
+    // The mount source must exist and be empty, or docker would create a
+    // directory in its place / nginx would render stale routes.
+    assert.equal(fs.existsSync(env.APP_USER_NGINX_ROUTES), true);
+    assert.equal(fs.readFileSync(env.APP_USER_NGINX_ROUTES, 'utf8'), '');
+  });
+
+  // A validator with its UI on must mount Splice's real routing config — the
+  // exact file Splice's own compose mounts — so its routes stay identical.
+  it("points a ui-enabled validator at Splice's real routing config", () => {
+    const config = baseConfig(generatedDir);
+    config.validators.appUser = { enabled: true, ui: true };
+    const env = readEnvFile(writeLocalnetEnv(config));
+    // baseConfig pins localnetDir to /tmp/localnet, so the resolved source is
+    // that checkout's nginx config for app-user.
+    assert.equal(env.APP_USER_NGINX_ROUTES, '/tmp/localnet/conf/nginx/app-user.conf');
   });
 });
 

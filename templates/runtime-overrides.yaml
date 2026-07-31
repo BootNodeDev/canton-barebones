@@ -1,10 +1,21 @@
 # Compose override shipped INSIDE the canton-barebones package — it is always
 # appended to the compose -f chain and is not scaffolded into your project (put
-# your own tweaks in splice-localnet-overrides.yaml instead). It turns the `sv`
-# config flags into runtime behavior using only env-var substitution; the values
-# come from .generated/localnet.env (see writeLocalnetEnv in src/compose.js).
+# your own tweaks in splice-localnet-overrides.yaml instead). It turns the
+# UI-related config flags into runtime behavior using only env-var substitution;
+# the values come from .generated/localnet.env (see writeLocalnetEnv in
+# src/compose.js).
 #
-# Two levers per SV web UI:
+# Validator routes (`validators.*.ui`) — one volume mount per validator. Splice's
+# nginx config proxies to each validator's UI containers as fixed upstreams and
+# nginx dies at startup if one is missing, so a validator's routes may only exist
+# while its UI containers run. Each *_NGINX_ROUTES var holds the file to mount as
+# that validator's route template: Splice's real routing config when `ui: true`,
+# or an empty file (no routes, nothing to resolve) when the validator is headless
+# or disabled. Compose deduplicates volume mounts by target with the later file
+# winning, so this mount replaces the one Splice's compose.yaml declares for the
+# same target.
+#
+# SV web UIs (`sv.scanUI` / `sv.svUI` / `sv.walletUI`) — two levers per UI:
 #
 #   - replicas: 1 keeps Splice's default; 0 stops a disabled UI from starting.
 #     (An override entry rather than `docker compose --scale`, which errors for
@@ -19,6 +30,9 @@
 #     list entry always exists and only its value changes.
 services:
   nginx:
+    volumes:
+      - ${APP_PROVIDER_NGINX_ROUTES}:/etc/nginx/templates/app-provider.conf.template
+      - ${APP_USER_NGINX_ROUTES}:/etc/nginx/templates/app-user.conf.template
     networks:
       default:
         aliases:
