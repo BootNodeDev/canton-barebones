@@ -22,6 +22,11 @@
 #     still runs and stays reachable on its direct API ports.
 #
 # See src/compose.js (deriveRuntimePlan / writeGeneratedOverride) for how it is built.
+#
+# Finally, a THIRD, STATIC override ships inside the canton-barebones package
+# (templates/runtime-overrides.yaml, always applied before this file): it turns
+# the `sv` config flags into 0-replica pins and nginx aliases for the SV web UIs,
+# driven purely by env vars. See that file's header for the full detail.
 services:
   postgres:
     logging: &default-logging

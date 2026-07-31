@@ -3,8 +3,9 @@
 // with a clear message instead of failing deep inside Docker later, and then
 // resolves the extra runtime paths the rest of the tool needs. What the config
 // turns on and off, described inline with each schema: the two validators
-// (backend and, optionally, their UIs) and the network tools. The SV is not
-// configurable — it is required infrastructure and always runs fully.
+// (backend and, optionally, their UIs), the SV's web UIs, and the network tools.
+// The SV backend is not configurable — it is required infrastructure and always
+// runs — but each of its web UIs can be switched off individually.
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -74,12 +75,25 @@ const validatorSchema = z
 // Splice LocalNet only exposes two participant validators; both are always present
 // in the config and toggled via `enabled`, so this is a fixed-key object rather
 // than an open array. (The SV is not here: it is required infrastructure — it
-// founds the global synchronizer validators connect to — so it always runs fully,
-// with its own UIs, and has nothing to toggle.)
+// founds the global synchronizer validators connect to — so its backend always
+// runs; only its web UIs are configurable, via the separate `sv` section.)
 const validatorsSchema = z
   .object({
     appProvider: validatorSchema,
     appUser: validatorSchema,
+  })
+  .strict();
+
+// The SV's web UIs. Unlike a validator's all-or-nothing `ui` bundle, these can be
+// toggled per UI: each flag only controls whether that UI container runs, while
+// the APIs behind the same nginx port (scan API, SV admin API, canton JSON API)
+// proxy to the always-running splice/canton containers and stay reachable either
+// way. A disabled UI's URL answers 502 instead of serving the app.
+const svSchema = z
+  .object({
+    scanUI: z.boolean(),
+    svUI: z.boolean(),
+    walletUI: z.boolean(),
   })
   .strict();
 
@@ -105,6 +119,7 @@ const configSchema = z
     dockerNetwork: z.string().min(1, 'dockerNetwork must be a non-empty string'),
     persistence: persistenceSchema,
     validators: validatorsSchema,
+    sv: svSchema,
     networkTools: networkToolsSchema,
   })
   .strict();

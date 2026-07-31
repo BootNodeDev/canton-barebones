@@ -11,9 +11,15 @@
 //   - A validator with its backend on but UIs off would still make nginx try to
 //     route to its (absent) UIs and fail. To run it headless we blank out its
 //     nginx route with a generated override (see writeGeneratedOverride).
+//   - The SV's web UIs ride the always-on `sv` profile, so turning one off is not
+//     a profile decision either: a static override shipped with this package
+//     (templates/runtime-overrides.yaml) pins it to 0 replicas and keeps nginx
+//     bootable, driven purely by env vars written here (see writeLocalnetEnv).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+
+import { resolveFromPackage } from './paths.js';
 
 // Every profile this wrapper can select. Used by teardown (stop/reset) to make
 // sure containers from any profile are removed, not just the ones currently up.
@@ -32,6 +38,11 @@ const NGINX_ROUTE_TEMPLATE = {
 
 // Compose profile for each network tool.
 const TOOL_PROFILE = { console: 'console', multiSync: 'multi-sync', swaggerUI: 'swagger-ui' };
+
+// The SV web UI service behind each `sv.*` config flag. These live in the
+// always-selected `sv` profile, so a disabled one must be kept from starting via
+// the static runtime override rather than by dropping a profile.
+const SV_UI_SERVICE = { scanUI: 'scan-web-ui', svUI: 'sv-web-ui', walletUI: 'wallet-web-ui-sv' };
 
 // Formats one Docker env-file line and strips newlines to keep generated files valid.
 function envLine(key, value) {
@@ -52,6 +63,8 @@ function profileFlags(profiles) {
 //   are wanted, plus a profile per enabled network tool.
 // - headlessValidators: validators whose backend is on but UIs are off; nginx must
 //   be told to skip their routes (see writeGeneratedOverride).
+// - disabledSvUIs: SV web UI services turned off in the config; the static
+//   runtime override pins them to 0 replicas via env vars (see writeLocalnetEnv).
 export function deriveRuntimePlan(config) {
   const { appProvider, appUser } = config.validators;
 
@@ -84,7 +97,11 @@ export function deriveRuntimePlan(config) {
     }
   }
 
-  return { nodeEnv, upProfiles, headlessValidators };
+  const disabledSvUIs = Object.entries(config.sv)
+    .filter(([, on]) => !on)
+    .map(([flag]) => SV_UI_SERVICE[flag]);
+
+  return { nodeEnv, upProfiles, headlessValidators, disabledSvUIs };
 }
 
 // Writes runtime env files used to bridge this repo's config into Splice LocalNet.
@@ -95,6 +112,19 @@ export function writeLocalnetEnv(config) {
   fs.writeFileSync(emptyEnvPath, '');
 
   const { nodeEnv } = deriveRuntimePlan(config);
+
+  // One replicas + alias pair per SV web UI, consumed by the static
+  // templates/runtime-overrides.yaml (see its header for how the two work). The
+  // env prefix is the service name upper-snake-cased, e.g. SCAN_WEB_UI.
+  const svUiEnv = Object.entries(SV_UI_SERVICE).flatMap(([flag, service]) => {
+    const on = config.sv[flag];
+    const prefix = service.replaceAll('-', '_').toUpperCase();
+    return [
+      envLine(`${prefix}_REPLICAS`, on ? 1 : 0),
+      envLine(`${prefix}_NGINX_ALIAS`, on ? `${service}-unused` : service),
+    ];
+  });
+
   const contents = [
     envLine('IMAGE_TAG', config.imageTag),
     envLine('COMPOSE_PROJECT_NAME', config.composeProjectName),
@@ -105,6 +135,7 @@ export function writeLocalnetEnv(config) {
     envLine('SV_PROFILE', nodeEnv.SV_PROFILE),
     envLine('APP_PROVIDER_PROFILE', nodeEnv.APP_PROVIDER_PROFILE),
     envLine('APP_USER_PROFILE', nodeEnv.APP_USER_PROFILE),
+    ...svUiEnv,
     '',
   ].join('\n');
 
@@ -157,6 +188,11 @@ export function dockerComposeArgs(config, options = {}) {
   // Always apply Splice's CPU/memory limits: this is a local dev stack, so the
   // constraints keep it from starving the host and match how Splice runs LocalNet.
   args.push('-f', path.resolve(config.localnetDir, 'resource-constraints.yaml'));
+
+  // The package's static runtime override translates the `sv` UI env vars into
+  // replica pins and nginx aliases; it ships with the package (not scaffolded),
+  // and goes before the user's override so user tweaks can still win the merge.
+  args.push('-f', resolveFromPackage('templates/runtime-overrides.yaml'));
 
   args.push('-f', config.localnetOverridePath);
 

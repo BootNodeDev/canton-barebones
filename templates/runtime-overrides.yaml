@@ -1,0 +1,39 @@
+# Compose override shipped INSIDE the canton-barebones package — it is always
+# appended to the compose -f chain and is not scaffolded into your project (put
+# your own tweaks in splice-localnet-overrides.yaml instead). It turns the `sv`
+# config flags into runtime behavior using only env-var substitution; the values
+# come from .generated/localnet.env (see writeLocalnetEnv in src/compose.js).
+#
+# Two levers per SV web UI:
+#
+#   - replicas: 1 keeps Splice's default; 0 stops a disabled UI from starting.
+#     (An override entry rather than `docker compose --scale`, which errors for
+#     services whose profile is not selected, while an override entry stays inert.)
+#   - alias: Splice's sv.conf proxies to each UI's hostname as a fixed upstream,
+#     and nginx resolves those at startup, dying with "host not found in
+#     upstream" if a disabled UI's name no longer exists. A disabled UI's alias
+#     is therefore its real hostname, pointed at the nginx container itself: the
+#     name resolves, nginx boots, and browsing the disabled UI answers 502 while
+#     every API route on the SV port keeps working. An enabled UI gets an inert
+#     "<name>-unused" alias instead — static YAML has no conditionals, so the
+#     list entry always exists and only its value changes.
+services:
+  nginx:
+    networks:
+      default:
+        aliases:
+          - ${SCAN_WEB_UI_NGINX_ALIAS}
+          - ${SV_WEB_UI_NGINX_ALIAS}
+          - ${WALLET_WEB_UI_SV_NGINX_ALIAS}
+
+  scan-web-ui:
+    deploy:
+      replicas: ${SCAN_WEB_UI_REPLICAS}
+
+  sv-web-ui:
+    deploy:
+      replicas: ${SV_WEB_UI_REPLICAS}
+
+  wallet-web-ui-sv:
+    deploy:
+      replicas: ${WALLET_WEB_UI_SV_REPLICAS}

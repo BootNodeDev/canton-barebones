@@ -24,10 +24,10 @@ function assertRejects(raw, expectedFragment) {
 
 // The scaffolded default shipped by `init`: version 1, a pinned Splice source,
 // persistent volumes, app-provider off, app-user enabled headless (backend on,
-// UIs off), and all network tools off. The SV is not in the config — it is
-// required infrastructure that always runs fully. This is the baseline; every
-// negative case below clones it and breaks a single rule, so a failure points to
-// one validation concern.
+// UIs off), every SV web UI on (the SV backend itself is not in the config — it
+// is required infrastructure that always runs), and all network tools off. This
+// is the baseline; every negative case below clones it and breaks a single rule,
+// so a failure points to one validation concern.
 const validConfig = {
   version: 1,
   splice: { repo: 'canton-network/splice', tag: '0.6.11' },
@@ -38,6 +38,7 @@ const validConfig = {
     appProvider: { enabled: false, ui: false },
     appUser: { enabled: true, ui: false },
   },
+  sv: { scanUI: true, svUI: true, walletUI: true },
   networkTools: { console: false, multiSync: false, swaggerUI: false },
 };
 
@@ -89,11 +90,12 @@ describe('version gating', () => {
 // Scenario: strictness. Unknown fields must fail loudly instead of being ignored,
 // so typos and stale keys surface immediately.
 describe('unknown fields', () => {
-  // A stale top-level key (e.g. the removed `sv`) must be rejected.
+  // A stale top-level key (e.g. a leftover from an older config shape) must be
+  // rejected.
   it('rejects an unknown top-level field', () => {
     const raw = clone(validConfig);
-    raw.sv = { modules: {} };
-    assertRejects(raw, /sv/);
+    raw.globalModules = {};
+    assertRejects(raw, /globalModules/);
   });
 
   // Strictness must extend into nested objects: the removed per-validator
@@ -149,6 +151,49 @@ describe('required and typed fields', () => {
     const raw = clone(validConfig);
     raw.splice.repo = 'not-a-slug';
     assertRejects(raw, /splice\.repo/);
+  });
+});
+
+// Scenario: the SV web UI flags. The SV backend always runs, so the `sv` section
+// only carries its three per-UI flags; the section is required and each flag must
+// be an explicit boolean.
+describe('sv web UI flags', () => {
+  // Any combination of the three flags is valid — here scan on, the rest off —
+  // because each UI is independent (unlike a validator's all-or-nothing bundle).
+  it('accepts a partial set of SV UIs turned off', () => {
+    const raw = clone(validConfig);
+    raw.sv = { scanUI: true, svUI: false, walletUI: false };
+    assert.doesNotThrow(() => parseConfig(raw));
+  });
+
+  // `sv` is a required section: the flags default to nothing, so a config
+  // without them must fail rather than silently picking a behavior.
+  it('rejects a missing sv section', () => {
+    const raw = clone(validConfig);
+    delete raw.sv;
+    assertRejects(raw, /sv/);
+  });
+
+  // All three flags must be present — a missing one is a stale or typoed config.
+  it('rejects a missing sv UI flag', () => {
+    const raw = clone(validConfig);
+    delete raw.sv.walletUI;
+    assertRejects(raw, /walletUI/);
+  });
+
+  // Strictness inside the section: an unknown flag (e.g. an ANS UI, which only
+  // validators have) must be rejected.
+  it('rejects an unknown sv UI flag', () => {
+    const raw = clone(validConfig);
+    raw.sv.ansUI = true;
+    assertRejects(raw, /ansUI/);
+  });
+
+  // Flags must be explicit booleans; a string "false" is a common mistake.
+  it('rejects a non-boolean sv UI flag', () => {
+    const raw = clone(validConfig);
+    raw.sv.scanUI = 'false';
+    assertRejects(raw, /scanUI/);
   });
 });
 

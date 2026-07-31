@@ -74,7 +74,7 @@ Run `npm run init` once to scaffold `canton-barebones.config.json`, then edit it
 
 A Canton network here has three kinds of pieces:
 
-- **SV** (Super Validator) — the node that runs the _global synchronizer_, the shared backbone all participants connect to. It is required infrastructure, so it always runs fully (backend + its web dashboards). It has nothing to configure.
+- **SV** (Super Validator) — the node that runs the _global synchronizer_, the shared backbone all participants connect to. It is required infrastructure, so its backend always runs; only its web dashboards are configurable (the `sv` flags).
 - **Validators** — the participant nodes that run your apps. Splice's LocalNet ships two fixed slots, `appProvider` and `appUser`. Each has `enabled` (run its backend) and `ui` (also expose its web UIs).
 - **Network tools** — utilities that work across the nodes: the Canton `console`, `multiSync` (adds a second, local synchronizer), and `swaggerUI` (API docs).
 
@@ -91,6 +91,8 @@ A Canton network here has three kinds of pieces:
     "appUser": { "enabled": true, "ui": false }, // default: backend on, UIs off (headless)
   },
 
+  "sv": { "scanUI": true, "svUI": true, "walletUI": true }, // the SV's web UIs, toggleable per UI
+
   "networkTools": { "console": false, "multiSync": false, "swaggerUI": false },
 }
 ```
@@ -99,6 +101,7 @@ Rules:
 
 - `ui` needs the backend, so it can only be `true` when that validator's `enabled` is `true`.
 - A validator's UIs come as one bundle (wallet + ANS): it is on-or-off per validator, not per individual UI. `enabled: true, ui: false` runs it **headless** — backend only, reached on its direct API ports.
+- The SV backend is not configurable — it is required infrastructure and always runs. Its web UIs are, individually: an `sv` flag off skips that UI container, while the API routes on the SV's nginx port keep working (a disabled UI's URL answers 502).
 - Config changes take effect on the next `start`.
 
 ### How your config becomes running services
@@ -110,25 +113,28 @@ Rules:
 | always                   | `--profile sv` runs the SV fully and, with it, the shared postgres/canton/splice/nginx                              |
 | `validators.*.enabled`   | switches that validator's backend on/off via an env var                                                             |
 | `validators.*.ui`        | on → also starts that validator's UIs; off (but enabled) → nginx is told to skip that validator so it runs headless |
+| an `sv` UI flag off      | env vars pin that UI to 0 replicas and alias its hostname onto nginx (static `templates/runtime-overrides.yaml`)    |
 | a `networkTools` flag on | starts that tool via its profile                                                                                    |
 
 So the default config launches the SV plus a headless `appUser`, and each flag you flip adds more. (For _why_ a headless validator needs special handling, see [Design notes](#design-notes).)
 
 ## UIs and endpoints
 
-Assuming every flag is on, this is everything the stack exposes. Each participant gets its own nginx port (`sv` 4000, `app-provider` 3000, `app-user` 2000), and its web UIs and ledger APIs are reached through hostnames on that port. A validator's routes only appear when its `ui: true`; the SV is always on. All `*.localhost` names resolve to `127.0.0.1` automatically.
+Assuming every flag is on, this is everything the stack exposes. Each participant gets its own nginx port (`sv` 4000, `app-provider` 3000, `app-user` 2000), and its web UIs and ledger APIs are reached through hostnames on that port. A validator's routes only appear when its `ui: true`; the SV's APIs are always on and its web UIs follow the `sv` flags. All `*.localhost` names resolve to `127.0.0.1` automatically.
 
 > In **headless** mode (`enabled: true, ui: false`) a validator's nginx routes below are not exposed. Reach its ledger API on the direct participant ports instead: JSON on `<prefix>975`, gRPC on `<prefix>901`, where the prefix is `2`/`3`/`4` — e.g. `localhost:2975` (JSON) and `localhost:2901` (gRPC) for app-user.
 
-### SV (port 4000, always on)
+### SV (port 4000, backend always on)
 
-| Surface                 | URL                                       |
-| ----------------------- | ----------------------------------------- |
-| SV operations dashboard | http://sv.localhost:4000                  |
-| Scan (network explorer) | http://scan.localhost:4000                |
-| Wallet                  | http://wallet.localhost:4000              |
-| JSON Ledger API         | http://canton.localhost:4000/v2           |
-| OpenAPI spec            | http://canton.localhost:4000/docs/openapi |
+The three web UIs each have an `sv` config flag; turning one off makes its URL answer 502 while the API rows keep working.
+
+| Surface                 | URL                                       | Requires      |
+| ----------------------- | ----------------------------------------- | ------------- |
+| SV operations dashboard | http://sv.localhost:4000                  | `sv.svUI`     |
+| Scan (network explorer) | http://scan.localhost:4000                | `sv.scanUI`   |
+| Wallet                  | http://wallet.localhost:4000              | `sv.walletUI` |
+| JSON Ledger API         | http://canton.localhost:4000/v2           | always        |
+| OpenAPI spec            | http://canton.localhost:4000/docs/openapi | always        |
 
 ### app-user (port 2000, requires `validators.appUser.ui: true`)
 
@@ -176,11 +182,11 @@ The binary is `canton-barebones <command>`; the `npm run <command>` scripts wrap
 
 **Exit codes & output.** Every command exits `0` on success and `1` on failure, printing the error message to stderr.
 
-**`--json`** (on `validate`, `setup`, `status`) switches to machine-readable output: success goes to stdout, and on failure a `{ "ok": false, "error": "…" }` object goes to stderr, still exiting `1`. Use `validate --json` to see exactly what a config resolves to **without starting anything** — its `plan` field lists the compose profiles, headless validators, and participant env:
+**`--json`** (on `validate`, `setup`, `status`) switches to machine-readable output: success goes to stdout, and on failure a `{ "ok": false, "error": "…" }` object goes to stderr, still exiting `1`. Use `validate --json` to see exactly what a config resolves to **without starting anything** — its `plan` field lists the compose profiles, headless validators, disabled SV UIs, and participant env:
 
 ```bash
 canton-barebones validate --json
-# { "ok": true, "plan": { "upProfiles": ["sv","app-user"], "headlessValidators": [], "nodeEnv": {…} }, … }
+# { "ok": true, "plan": { "upProfiles": ["sv","app-user"], "headlessValidators": [], "disabledSvUIs": [], "nodeEnv": {…} }, … }
 
 canton-barebones status --json    # one JSON object per service, straight from docker compose
 ```
@@ -281,3 +287,10 @@ nginx renders an empty app-user.conf → no routes for it → starts fine.
 ```
 
 The validator's backend still runs (it is driven by an env var, not nginx) and stays reachable on its direct API ports; only its web routing is dropped. See `templates/splice-localnet-overrides.yaml` and `src/compose.js` for the full detail.
+
+### How a disabled SV web UI works (replicas + alias)
+
+Turning off an SV web UI (`sv.scanUI` / `sv.svUI` / `sv.walletUI`) cannot reuse the empty-template trick above: Splice's `sv.conf` mixes the UI routes with **API routes** (scan API, SV admin API, canton JSON API) that proxy to the always-running `splice`/`canton` containers and must stay up, and the flags are per-UI rather than all-or-nothing. Instead, a **static** override shipped inside the package (`templates/runtime-overrides.yaml`, always applied) uses two other compose levers, driven purely by env vars that the wrapper writes to `.generated/localnet.env`:
+
+1. `deploy.replicas: ${…_REPLICAS}` — `0` for a disabled UI, so compose never starts its container. (An override entry rather than `docker compose --scale`, which errors for services whose profile is not selected.)
+2. nginx still resolves that UI's hostname at startup (`proxy_pass http://scan-web-ui:8080/` …) and would crash with "host not found in upstream" once no container owns the name. So nginx carries a **network alias** per UI whose _value_ comes from `${…_NGINX_ALIAS}`: for a disabled UI it is the real hostname — the name resolves onto the nginx container itself, nginx boots, and since nothing there listens on the UI port, browsing the disabled UI answers **502** while every API route on port 4000 keeps working. For an enabled UI it is an inert `<name>-unused` (static YAML has no conditionals, so the list entry always exists and only its value changes).
