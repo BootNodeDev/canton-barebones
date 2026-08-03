@@ -8,3 +8,6 @@ node_modules/
 /canton-barebones.config.json
 /splice-localnet-overrides.yaml
 
+
+# Compiled standalone binaries (npm run build:binary)
+dist/
