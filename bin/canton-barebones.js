@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // Command-line entry point. It reads the sub-command (init, start, stop, ...) and
-// runs it. Every command except `init`/`help` first loads and validates the config
-// (which also downloads Splice on first run), then shells out to Docker Compose.
-// The heavy lifting lives in src/*; this file is just the dispatcher.
-import { loadConfig } from '../src/config.js';
+// runs it. Every command except `init`/`help`/`stop` first loads and validates the
+// config (which also downloads Splice on first run), then shells out to Docker
+// Compose. `stop` only reads `composeProjectName` so a broken config can still
+// bring the stack down. The heavy lifting lives in src/*; this file is just the
+// dispatcher.
+import { loadComposeProjectName, loadConfig } from '../src/config.js';
 import { init } from '../src/init.js';
 import {
   allLocalnetProfiles,
   deriveRuntimePlan,
   dockerComposeArgs,
   runDockerCompose,
+  stopStackByProjectName,
   writeLocalnetEnv,
 } from '../src/compose.js';
 import { isJsonMode, printError, printResult, setJsonMode } from '../src/output.js';
@@ -53,6 +56,14 @@ function main() {
 
   if (command === 'init') {
     init({ force: rest.includes('--force') });
+    return;
+  }
+
+  // `stop` deliberately skips loadConfig(): tearing the stack down must keep
+  // working when the config is broken, and Compose only needs the project name
+  // to find the containers. Every other Docker command still validates fully.
+  if (command === 'stop') {
+    stopStackByProjectName(loadComposeProjectName());
     return;
   }
 
@@ -118,9 +129,6 @@ function main() {
     }
     case 'start':
       runDockerCompose(config, ['up', '-d', '--remove-orphans']);
-      return;
-    case 'stop':
-      runDockerCompose(config, ['down', '--remove-orphans'], { profiles: allLocalnetProfiles });
       return;
     case 'reset':
       runDockerCompose(config, ['down', '-v', '--remove-orphans'], { profiles: allLocalnetProfiles });

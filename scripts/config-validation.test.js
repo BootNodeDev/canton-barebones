@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseConfig } from '../src/config.js';
+import { parseComposeProjectName, parseConfig } from '../src/config.js';
 
 // Deep-clones a config object so each case can mutate a copy without affecting
 // the shared valid baseline.
@@ -194,6 +194,47 @@ describe('sv web UI flags', () => {
     const raw = clone(validConfig);
     raw.sv.scanUI = 'false';
     assertRejects(raw, /scanUI/);
+  });
+});
+
+// Scenario: the minimal parse used by `stop`. `stop` must be able to tear down
+// a running stack even when the config is otherwise broken, so
+// parseComposeProjectName only checks the one field Docker Compose needs to
+// find the containers; everything else, including the version gate, is
+// deliberately ignored.
+describe('parseComposeProjectName (minimal parse for stop)', () => {
+  // Happy path: the scaffolded default's project name comes back verbatim.
+  it('extracts the project name from a valid config', () => {
+    assert.equal(parseComposeProjectName(clone(validConfig)), 'canton-barebones');
+  });
+
+  // The whole point of this parse: a config that parseConfig would reject
+  // (unknown key, wrong-typed flag, outdated version) must still yield the
+  // project name so `stop` can run.
+  it('tolerates a config that full validation rejects', () => {
+    const raw = clone(validConfig);
+    raw.version = 0; // outdated version, would trip the version gate
+    raw.staleKey = true; // unknown field, would trip strict parsing
+    raw.networkTools.console = 'true'; // wrong type, would trip the schema
+    assertRejects(raw, /not compatible/); // sanity check: parseConfig does reject it
+    assert.equal(parseComposeProjectName(raw), 'canton-barebones');
+  });
+
+  // Without a usable project name Compose could target the wrong stack (or
+  // nothing), so a missing field must fail with the standard invalid-config
+  // message naming the field.
+  it('rejects a missing composeProjectName', () => {
+    const raw = clone(validConfig);
+    delete raw.composeProjectName;
+    assert.throws(() => parseComposeProjectName(raw), /composeProjectName/);
+  });
+
+  // An empty string would make docker compose fall back to an unrelated default
+  // project, so it is rejected the same way the full schema rejects it.
+  it('rejects an empty composeProjectName', () => {
+    const raw = clone(validConfig);
+    raw.composeProjectName = '';
+    assert.throws(() => parseComposeProjectName(raw), /composeProjectName/);
   });
 });
 

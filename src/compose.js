@@ -23,8 +23,9 @@ import { spawnSync } from 'node:child_process';
 
 import { resolveFromPackage } from './paths.js';
 
-// Every profile this wrapper can select. Used by teardown (stop/reset) to make
-// sure containers from any profile are removed, not just the ones currently up.
+// Every profile this wrapper can select. Used by `reset` to make sure containers
+// from any profile are removed, not just the ones currently up. (`stop` does not
+// need profiles: it tears down by project name, see stopStackByProjectName.)
 export const allLocalnetProfiles = ['app-provider', 'app-user', 'sv', 'swagger-ui', 'console', 'multi-sync'];
 
 // Compose profile that starts each validator's UI bundle.
@@ -193,11 +194,7 @@ export function dockerComposeArgs(config, options = {}) {
 // Runs Docker Compose with inherited stdio by default so users see startup progress.
 export function runDockerCompose(config, commandArgs, options = {}) {
   const args = [...dockerComposeArgs(config, options), ...commandArgs];
-  if (options.printCommand) {
-    console.log(['docker', ...args].join(' '));
-  }
-
-  const result = spawnSync('docker', args, {
+  return runDocker(args, {
     cwd: config.localnetDir,
     env: {
       ...process.env,
@@ -207,6 +204,29 @@ export function runDockerCompose(config, commandArgs, options = {}) {
       LOCALNET_DIR: config.localnetDir,
       LOCALNET_ENV_DIR: config.localnetEnvDir,
     },
+    ...options,
+  });
+}
+
+// Stops the stack knowing only its Compose project name. Compose matches the
+// containers by their project label, so no compose files, env files, or profiles
+// are needed, which lets `stop` work even when the rest of the config (or the
+// Splice checkout) is broken. Volumes are kept, same as the file-based `down`.
+export function stopStackByProjectName(projectName) {
+  return runDocker(['compose', '--project-name', projectName, 'down', '--remove-orphans'], {});
+}
+
+// Shared `docker` spawn wrapper: inherits stdio by default so users see compose
+// progress, turns a missing binary into an actionable dependency error, and
+// surfaces compose's stderr on a non-zero exit.
+function runDocker(args, options = {}) {
+  if (options.printCommand) {
+    console.log(['docker', ...args].join(' '));
+  }
+
+  const result = spawnSync('docker', args, {
+    cwd: options.cwd,
+    env: options.env,
     stdio: options.stdio ?? 'inherit',
     encoding: 'utf8',
   });

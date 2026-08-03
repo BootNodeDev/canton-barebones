@@ -147,6 +147,29 @@ export function parseConfig(raw) {
   return result.data;
 }
 
+// Extracts `composeProjectName` from a raw config, ignoring every other field
+// (including `version`: an outdated config still names a stack worth stopping).
+// Pure, like parseConfig, so it can be unit tested directly.
+export function parseComposeProjectName(raw) {
+  const name = raw?.composeProjectName;
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error(
+      'Invalid canton-barebones.config.json:\n  - composeProjectName: composeProjectName must be a non-empty string'
+    );
+  }
+  return name;
+}
+
+// Reads only `composeProjectName` from the config file, skipping full schema
+// validation. Used by `stop`: a broken config must not leave a running stack
+// that the tool can no longer bring down, and the project name is the one field
+// Docker Compose needs to find the stack's containers (it matches them by
+// project label, no compose files required).
+export function loadComposeProjectName() {
+  assertFileExists(configPath, 'Config file (run "canton-barebones init" first)');
+  return parseComposeProjectName(readJson(configPath));
+}
+
 // Loads canton-barebones.config.json from the project directory, validates it,
 // and resolves all runtime paths and the pinned Splice checkout. Mapping the
 // config onto compose profiles/env/overrides lives in compose.js, next to the
