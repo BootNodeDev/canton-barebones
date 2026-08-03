@@ -1,5 +1,11 @@
 # @bootnodedev/canton-barebones
 
+## 0.2.2
+
+### Patch Changes
+
+- 17059ef: Rename the npm package from `@bootnodedev/cbn` to `@bootnodedev/canton-barebones` to match the repository name. The CLI binary is still `canton-barebones`; `@bootnodedev/cbn` is deprecated on npm and will receive no further releases.
+
 ## 0.2.1
 
 ### Patch Changes
