@@ -50,7 +50,7 @@ npm run init
        canton-barebones.config.json      ← the stack config you edit
        splice-localnet-overrides.yaml    ← local Docker Compose tweaks
 
-npm run start   (and stop / status / logs / validate — anything that reads config)
+npm run start   (and status / logs / validate — anything that reads config)
   └─ loadConfig()                         (src/config.js)  reads + validates your config
        ├─ ensureSpliceCheckout()          (src/splice.js)  downloads Splice on first run
        └─ runDockerCompose()              (src/compose.js) generates runtime files, runs compose
@@ -179,6 +179,8 @@ The binary is `canton-barebones <command>`; the `npm run <command>` scripts wrap
 | `status`          | Show service status (`docker compose ps`)                                                                       | none                                                                                                                     | yes    |
 | `logs [args…]`    | Show logs (`docker compose logs`); extra args pass through                                                      | none                                                                                                                     | yes    |
 | `compose <args…>` | Run docker compose with the configured LocalNet files; **no args prints the computed docker command** (dry run) | depends on the args                                                                                                      | yes    |
+
+**`stop` works even with a broken config.** It only reads `composeProjectName`, which is all Docker Compose needs to find the stack's containers (it matches them by project label). If that field is missing or invalid, `stop` fails with the usual config error. Every other Docker command validates the full config first.
 
 **Exit codes & output.** Every command exits `0` on success and `1` on failure, printing the error message to stderr.
 
