@@ -1,4 +1,4 @@
-# @bootnodedev/cbn
+# @bootnodedev/canton-barebones
 
 ## 0.2.1
 

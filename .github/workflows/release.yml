@@ -1,4 +1,4 @@
-# Publishes @bootnodedev/cbn to npm via Changesets.
+# Publishes @bootnodedev/canton-barebones to npm via Changesets.
 #
 # Flow: every push to main runs this. The changesets action either
 #   (a) opens/updates a "Version Packages" PR when unreleased changesets exist, or
