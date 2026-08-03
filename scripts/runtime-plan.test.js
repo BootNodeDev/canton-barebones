@@ -32,7 +32,7 @@ function baseConfig(generatedDir) {
 
 // A throwaway directory standing in for the project's .generated/, so the tests
 // can inspect the env file the writer produces without touching the repo.
-const generatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cbn-runtime-plan-'));
+const generatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canton-barebones-runtime-plan-'));
 after(() => fs.rmSync(generatedDir, { recursive: true, force: true }));
 
 // Parses a generated env file back into a key→value map so assertions can target
