@@ -40,12 +40,24 @@ export function registerEmbeddedPackageFiles(files) {
 // materialized under the project's .generated/ dir and that path is returned.
 export function resolveFromPackage(...segments) {
   const relativePath = segments.join('/');
-  if (embeddedPackageFiles && relativePath in embeddedPackageFiles) {
+  if (embeddedPackageFiles) {
+    const content = embeddedPackageFiles[relativePath];
+    // Asking for a file that was never embedded means the binary entry point
+    // is out of sync with the code (e.g. a template was added to the package
+    // but not to scripts/binary-entry.js). Fail here, naming the cause: the
+    // disk fallback below does not exist inside a compiled binary, so falling
+    // through would surface as a confusing ENOENT far from the real mistake.
+    if (content === undefined) {
+      throw new Error(
+        `Package file "${relativePath}" is not embedded in this binary. ` +
+          'Add it to the imports in scripts/binary-entry.js and rebuild.'
+      );
+    }
     // Rewritten on every call: the content must always match the running binary's
     // version, and a stale copy from an older binary would be silently wrong.
     const materializedPath = path.resolve(projectRoot, '.generated', relativePath);
     fs.mkdirSync(path.dirname(materializedPath), { recursive: true });
-    fs.writeFileSync(materializedPath, embeddedPackageFiles[relativePath]);
+    fs.writeFileSync(materializedPath, content);
     return materializedPath;
   }
   return path.resolve(packageRoot, ...segments);
