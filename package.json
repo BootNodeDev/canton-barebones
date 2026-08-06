@@ -3,6 +3,7 @@
   "version": "0.2.2",
   "type": "module",
   "description": "Barebones one-click Canton developer stack.",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BootNodeDev/canton-barebones.git"
