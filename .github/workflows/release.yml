@@ -1,9 +1,12 @@
-# Publishes @bootnodedev/canton-barebones to npm via Changesets.
+# Publishes @bootnodedev/canton-barebones to npm via Changesets, and the dpm
+# component (standalone binaries) to ghcr.io.
 #
 # Flow: every push to main runs this. The changesets action either
 #   (a) opens/updates a "Version Packages" PR when unreleased changesets exist, or
 #   (b) publishes to npm when that PR was merged (i.e. package.json version bumped).
 # Nothing is published on a normal merge — only when the Version Packages PR lands.
+# The dpm component is published right after a successful npm publish, with the
+# same version, so both channels always ship the same source.
 name: Release
 
 on:
@@ -20,6 +23,7 @@ jobs:
       contents: write # create tags / GitHub releases and push the Version Packages PR
       pull-requests: write # open and update the Version Packages PR
       id-token: write # npm trusted publishing (OIDC) and provenance
+      packages: write # push the dpm component to ghcr.io
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,8 +45,44 @@ jobs:
       - run: npm test
 
       - name: Create Version PR or publish
+        id: changesets
         uses: changesets/action@v1
         with:
           publish: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Everything below runs only when the step above actually published to npm
+      # (the Version Packages PR was merged); ordinary merges skip it entirely.
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.changesets.outputs.published == 'true'
+        with:
+          bun-version: 1.3.1 # keep in sync with ci.yml
+
+      # Pinned dpm shared with ci.yml — see the action for the pin rationale.
+      - uses: ./.github/actions/setup-dpm
+        if: steps.changesets.outputs.published == 'true'
+
+      - name: Publish dpm component to ghcr.io
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run build:component
+
+          # dpm reads registry credentials from docker's config.json, so a
+          # regular docker login is all the auth it needs.
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+          # The npm publish already bumped package.json, so its version is the
+          # single source of truth for both channels. dpm requires strict semver
+          # tags; --extra-tags latest lets users pin `:latest` in daml.yaml.
+          VERSION=$(node -p "require('./package.json').version")
+          dpm publish component "oci://ghcr.io/bootnodedev/canton-barebones:${VERSION}" \
+            -p linux/amd64=dist/dpm-component/linux-amd64 \
+            -p linux/arm64=dist/dpm-component/linux-arm64 \
+            -p darwin/amd64=dist/dpm-component/darwin-amd64 \
+            -p darwin/arm64=dist/dpm-component/darwin-arm64 \
+            -p windows/amd64=dist/dpm-component/windows-amd64 \
+            --extra-tags latest
