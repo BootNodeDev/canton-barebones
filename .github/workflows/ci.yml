@@ -1,0 +1,73 @@
+# PR validation: unit tests plus a full dpm-component build check.
+#
+# The component job cross-compiles the CLI for every supported platform and
+# runs `dpm publish component --dry-run`, which is dpm's own validation of the
+# manifest and layout (including the LICENSE-at-component-root requirement).
+# Nothing is published here — the real publish happens in release.yml when a
+# Version Packages PR lands.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm test
+
+  component:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Bun is the cross-compiler for the standalone binaries (see
+      # scripts/build-component.js). Pinned for reproducible binaries.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.1
+
+      # The compiled binary bundles the runtime dependencies (zod), so they
+      # must be installed before Bun can resolve them.
+      - run: npm ci
+
+      - run: npm run build:component
+
+      # Pinned dpm shared with release.yml — see the action for the pin rationale.
+      - uses: ./.github/actions/setup-dpm
+
+      # The version tag is a placeholder: --dry-run never contacts a registry,
+      # but dpm still requires a syntactically valid oci:// URI with strict
+      # semver. The -p flags must cover exactly the platforms the build emits
+      # (scripts/build-component.js prints this same command on every run).
+      - name: Validate component (dpm publish --dry-run)
+        run: |
+          dpm publish component 'oci://ghcr.io/bootnodedev/canton-barebones:0.0.0' \
+            -p linux/amd64=dist/dpm-component/linux-amd64 \
+            -p linux/arm64=dist/dpm-component/linux-arm64 \
+            -p darwin/amd64=dist/dpm-component/darwin-amd64 \
+            -p darwin/arm64=dist/dpm-component/darwin-arm64 \
+            -p windows/amd64=dist/dpm-component/windows-amd64 \
+            --dry-run
+
+      # The linux-amd64 binary can run right here: make sure a compiled binary
+      # actually executes and scaffolds from its embedded templates.
+      - name: Smoke-test the linux binary
+        run: |
+          mkdir smoke && cd smoke
+          ../dist/dpm-component/linux-amd64/canton-barebones init
+          test -f canton-barebones.config.json
+          test -f splice-localnet-overrides.yaml
