@@ -1,0 +1,26 @@
+# Installs the dpm CLI, pinned by version and checksum.
+#
+# Single source of truth for which dpm both workflows run: ci.yml (validates
+# the component with a publish --dry-run) and release.yml (publishes it to
+# ghcr). Bumping dpm means editing the two values below in a PR — where the CI
+# dry-run exercises the new version before it can ever touch a release.
+# The pin matters because dpm assembles and pushes artifacts in our name: a new
+# dpm release must never silently change what the pipelines execute.
+name: Setup dpm
+description: Install the dpm CLI, pinned by version and sha256 checksum
+
+runs:
+  using: composite
+  steps:
+    - name: Install dpm
+      shell: bash
+      env:
+        DPM_VERSION: 1.0.21
+        DPM_SHA256: 71061e3ecee029bc88ccfc1b51367e3257162f3bd91c7edcc688af503fef5e59
+      run: |
+        curl -fsSL -o dpm.tar.gz "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz"
+        echo "${DPM_SHA256}  dpm.tar.gz" | sha256sum -c -
+        tar -xzf dpm.tar.gz dpm
+        rm dpm.tar.gz
+        sudo mv dpm /usr/local/bin/dpm
+        dpm --version

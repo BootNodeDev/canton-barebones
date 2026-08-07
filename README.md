@@ -18,14 +18,47 @@ Splice LocalNet is powerful but has many moving parts and knobs. This tool is a 
 
 ### From npm
 
-> The npm package name is **TBD** (not published yet) — replace `<package>` below once it is published.
-
 ```bash
-npx <package> init     # scaffold the config file into the current folder (run once)
-npx <package> start    # download Splice if needed, then start the stack
+npx @bootnodedev/canton-barebones init     # scaffold the config file into the current folder (run once)
+npx @bootnodedev/canton-barebones start    # download Splice if needed, then start the stack
 ```
 
 `npx` pulls the runtime dependencies automatically, so there is no separate install step.
+
+### From dpm
+
+The tool is also published as a [dpm](https://github.com/digital-asset/dpm) component
+(a self-contained binary — no Node required). Both flows below need a project with a
+`daml.yaml` and end in the same state: the component listed in `daml.yaml` and installed.
+
+Add it with one command:
+
+```bash
+dpm add component oci://ghcr.io/bootnodedev/canton-barebones:latest # or pin a version
+```
+
+Or declare it under `components` in `daml.yaml` and install (e.g. when the entry is
+already committed to the project):
+
+```yaml
+# daml.yaml
+components:
+  - oci://ghcr.io/bootnodedev/canton-barebones:latest
+```
+
+```bash
+dpm install package
+```
+
+Once installed, the CLI is available as a dpm subcommand:
+
+```bash
+dpm canton-barebones init     # `dpm cbn <cmd>` works too
+dpm canton-barebones start
+```
+
+Every command in the [CLI reference](#cli-reference) works the same way, prefixed with
+`dpm canton-barebones` (or the `dpm cbn` alias).
 
 ### From a cloned repo
 

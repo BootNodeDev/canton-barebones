@@ -3,6 +3,7 @@
   "version": "0.2.2",
   "type": "module",
   "description": "Barebones one-click Canton developer stack.",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BootNodeDev/canton-barebones.git"
@@ -26,6 +27,8 @@
     "validate": "node ./bin/canton-barebones.js validate",
     "compose": "node ./bin/canton-barebones.js compose",
     "compose:config": "node ./bin/canton-barebones.js compose config",
+    "build:binary": "bun build --compile scripts/binary-entry.js --outfile dist/canton-barebones",
+    "build:component": "node scripts/build-component.js",
     "test": "node --test \"scripts/**/*.test.js\"",
     "test:e2e": "node ./bin/canton-barebones.js init && node ./scripts/smoke.js",
     "changeset": "changeset",

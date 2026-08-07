@@ -1,0 +1,20 @@
+# dpm component manifest (https://github.com/digital-asset/dpm).
+#
+# This file travels inside the OCI artifact next to the compiled binary and
+# tells dpm which subcommands the component contributes: dpm surfaces `name`
+# (and `aliases`) as `dpm canton-barebones ...` / `dpm cbn ...` and execs
+# `path` with the user's remaining args, so init/start/stop/... keep being
+# resolved by our own CLI dispatcher.
+#
+# This is the single source manifest: scripts/build-component.js copies it into
+# every per-platform directory, rewriting `path` to the .exe name for the
+# windows variant (dpm has no per-platform fields in the schema — each platform
+# ships its own copy of the manifest).
+apiVersion: digitalasset.com/v1
+kind: Component
+spec:
+  commands:
+    - path: ./canton-barebones
+      name: canton-barebones
+      desc: Barebones one-click Canton localnet developer stack
+      aliases: ["cbn"]
