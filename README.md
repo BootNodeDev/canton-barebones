@@ -114,7 +114,7 @@ A Canton network here has three kinds of pieces:
 ```jsonc
 {
   "version": 1,
-  "splice": { "repo": "canton-network/splice", "tag": "0.6.11" }, // which Splice version to download
+  "splice": { "repo": "canton-network/splice", "tag": "0.6.11" }, // which Splice version to download (see Upgrading Splice)
   "composeProjectName": "canton-barebones", // Docker Compose project name
   "dockerNetwork": "cantonBarebones", // Docker network name
   "persistence": { "mode": "persistent" }, // "persistent" keeps volumes; "ephemeral" wipes on reset
@@ -205,7 +205,7 @@ The binary is `canton-barebones <command>`; the `npm run <command>` scripts wrap
 | ----------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------ |
 | `init [--force]`  | Scaffold the config and compose override into the project                                                       | Writes `canton-barebones.config.json` and `splice-localnet-overrides.yaml` (existing files are skipped unless `--force`) | no     |
 | `setup`           | Download the pinned Splice LocalNet source                                                                      | Writes `.generated/splice/…` on first run                                                                                | no     |
-| `validate`        | Validate the config and resolved Splice paths                                                                   | Writes `.generated/localnet.env`; downloads Splice on first run                                                          | no     |
+| `validate`        | Validate the config, the resolved Splice paths, and that the pinned Splice still fits this wrapper              | Writes `.generated/localnet.env`; downloads Splice on first run                                                          | no     |
 | `start`           | Start the stack (`docker compose up -d`)                                                                        | Starts containers, creates volumes and the Docker network                                                                | yes    |
 | `stop`            | Stop containers, keep volumes (`docker compose down`)                                                           | Removes containers; data volumes are preserved                                                                           | yes    |
 | `reset`           | Stop containers and remove volumes (`docker compose down -v`)                                                   | **Deletes all stack data**                                                                                               | yes    |
@@ -246,6 +246,15 @@ Non-obvious behaviors worth knowing before automating against the stack:
 - **UIs go through nginx**, published on ports `2000`/`3000`/`4000`, not as per-UI host ports. `*.localhost` hostnames resolve to `127.0.0.1` automatically.
 - **Config changes apply on the next `start`** — nothing reacts to the file while the stack is running.
 
+## Upgrading Splice
+
+Point `splice.tag` in `canton-barebones.config.json` at the new version, then:
+
+```bash
+canton-barebones validate   # checks that the new Splice works with canton-barebones
+canton-barebones start      # if validate passed
+```
+
 ## Troubleshooting
 
 | Symptom                                              | Cause                                                                        | Fix                                                              |
@@ -256,6 +265,7 @@ Non-obvious behaviors worth knowing before automating against the stack:
 | Port already in use (e.g. `2000`, `4903`, `5432`)    | Another stack (or the same one) is already up on that port                   | `stop` the running stack, or free the port                       |
 | Containers are up but a participant does not respond | A bound port is not the same as a live backend                               | Check `readyz` (see [Verifying the stack](#verifying-the-stack)) |
 | Stale or corrupted state after config churn          | Volumes hold old data                                                        | `reset` to wipe volumes, then `start`                            |
+| `The pinned Splice …@X.Y.Z is not compatible …`       | That Splice release moved something this wrapper addresses by name           | Pin a known-good tag, or open an issue (see [Upgrading Splice](#upgrading-splice)) |
 | Anything under `.generated/` looks wrong             | It is disposable                                                             | Delete `.generated/` — it is rebuilt on the next `start`         |
 
 ## Development
