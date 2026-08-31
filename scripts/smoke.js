@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 import { loadConfig } from '../src/config.js';
 import { deriveRuntimePlan, runDockerCompose, writeLocalnetEnv } from '../src/compose.js';
+import scaffoldedConfig from '../templates/canton-barebones.config.json' with { type: 'json' };
 
 const config = loadConfig();
 const runtimeEnvPath = writeLocalnetEnv(config);
@@ -13,8 +14,10 @@ const localnetOverride = fs.readFileSync(config.localnetOverridePath, 'utf8');
 // It requires Docker and a Splice checkout, so it runs under "test:e2e", not the
 // unit test suite.
 assert.equal(config.imageTag.length > 0, true);
-assert.equal(config.splice.repo, 'canton-network/splice');
-assert.equal(config.splice.tag, '0.6.11');
+// "test:e2e" runs `init` first, so the loaded config is the scaffolded template:
+// the pin reaching the project intact is what these two assert.
+assert.equal(config.splice.repo, scaffoldedConfig.splice.repo);
+assert.equal(config.splice.tag, scaffoldedConfig.splice.tag);
 assert.equal(config.persistence.mode, 'persistent');
 assert.deepEqual(config.validators, {
   appProvider: { enabled: false, ui: false },
