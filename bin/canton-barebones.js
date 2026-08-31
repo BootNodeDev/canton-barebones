@@ -15,6 +15,7 @@ import {
   stopStackByProjectName,
   writeLocalnetEnv,
 } from '../src/compose.js';
+import { checkSpliceContract } from '../src/splice-contract.js';
 import { isJsonMode, printError, printResult, setJsonMode } from '../src/output.js';
 
 // Prints the CLI contract without requiring Docker or a valid LocalNet checkout.
@@ -24,7 +25,7 @@ function usage() {
 Commands:
   init                 Scaffold config and compose overrides into the project
   setup                Fetch the pinned Splice LocalNet source
-  validate             Validate config and LocalNet paths
+  validate             Validate config, LocalNet paths and Splice compatibility
   compose <args...>    Run docker compose with the configured LocalNet files
   start                Start the stack
   stop                 Stop the stack and keep volumes
@@ -86,12 +87,28 @@ function main() {
       return;
     case 'validate': {
       const runtimeEnvPath = writeLocalnetEnv(config);
+      // Fail before reporting the plan: a plan is meaningless if the pinned
+      // Splice no longer defines what the overrides address (see
+      // src/splice-contract.js), and the mismatch is far easier to act on here
+      // than as a Docker error, or a silent no-op, at start time.
+      const mismatches = checkSpliceContract(config);
+      if (mismatches.length > 0) {
+        throw new Error(
+          `The pinned Splice ${config.splice.repo}@${config.splice.tag} is not compatible with this version of canton-barebones:\n` +
+            mismatches.map(mismatch => `  - ${mismatch}`).join('\n')
+        );
+      }
       // The resolved runtime plan is included so a consumer can see exactly what
       // the config will launch (profiles, headless validators, participant env)
       // without having to start the stack.
       printResult(
         {
-          splice: { repo: config.splice.repo, tag: config.splice.tag, imageTag: config.imageTag },
+          splice: {
+            repo: config.splice.repo,
+            tag: config.splice.tag,
+            imageTag: config.imageTag,
+            compatible: true,
+          },
           config: {
             version: config.version,
             composeProjectName: config.composeProjectName,
@@ -111,7 +128,7 @@ function main() {
         },
         () => {
           console.log(`Config OK: ${config.configPath}`);
-          console.log(`Splice: ${config.splice.repo}@${config.splice.tag}`);
+          console.log(`Splice: ${config.splice.repo}@${config.splice.tag} (compatible)`);
           console.log(`LocalNet: ${config.localnetDir}`);
           console.log(`Runtime env: ${runtimeEnvPath}`);
           console.log(`LocalNet override: ${config.localnetOverridePath}`);

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 import { loadConfig } from '../src/config.js';
 import { deriveRuntimePlan, runDockerCompose, writeLocalnetEnv } from '../src/compose.js';
+import { checkSpliceContract } from '../src/splice-contract.js';
 import scaffoldedConfig from '../templates/canton-barebones.config.json' with { type: 'json' };
 
 const config = loadConfig();
@@ -44,6 +45,10 @@ assert.equal(config.localnetOverridePath.endsWith('splice-localnet-overrides.yam
 assert.match(localnetOverride, /max-size: "25m"/);
 assert.match(localnetOverride, /max-file: "3"/);
 assert.match(localnetOverride, /LOG_LEVEL_STDOUT: "\$\{LOG_LEVEL:-INFO\}"/);
+
+// Against the real downloaded checkout, not a fixture: the pinned release must
+// still define every service, profile and mount target the overrides name.
+assert.deepEqual(checkSpliceContract(config), []);
 
 runDockerCompose(config, ['config', '--quiet'], { stdio: 'pipe' });
 
