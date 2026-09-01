@@ -3,6 +3,8 @@ import fs from 'node:fs';
 
 import { loadConfig } from '../src/config.js';
 import { deriveRuntimePlan, runDockerCompose, writeLocalnetEnv } from '../src/compose.js';
+import { checkSpliceContract } from '../src/splice-contract.js';
+import scaffoldedConfig from '../templates/canton-barebones.config.json' with { type: 'json' };
 
 const config = loadConfig();
 const runtimeEnvPath = writeLocalnetEnv(config);
@@ -13,8 +15,10 @@ const localnetOverride = fs.readFileSync(config.localnetOverridePath, 'utf8');
 // It requires Docker and a Splice checkout, so it runs under "test:e2e", not the
 // unit test suite.
 assert.equal(config.imageTag.length > 0, true);
-assert.equal(config.splice.repo, 'canton-network/splice');
-assert.equal(config.splice.tag, '0.6.11');
+// "test:e2e" runs `init` first, so the loaded config is the scaffolded template:
+// the pin reaching the project intact is what these two assert.
+assert.equal(config.splice.repo, scaffoldedConfig.splice.repo);
+assert.equal(config.splice.tag, scaffoldedConfig.splice.tag);
 assert.equal(config.persistence.mode, 'persistent');
 assert.deepEqual(config.validators, {
   appProvider: { enabled: false, ui: false },
@@ -41,6 +45,10 @@ assert.equal(config.localnetOverridePath.endsWith('splice-localnet-overrides.yam
 assert.match(localnetOverride, /max-size: "25m"/);
 assert.match(localnetOverride, /max-file: "3"/);
 assert.match(localnetOverride, /LOG_LEVEL_STDOUT: "\$\{LOG_LEVEL:-INFO\}"/);
+
+// Against the real downloaded checkout, not a fixture: the pinned release must
+// still define every service, profile and mount target the overrides name.
+assert.deepEqual(checkSpliceContract(config), []);
 
 runDockerCompose(config, ['config', '--quiet'], { stdio: 'pipe' });
 

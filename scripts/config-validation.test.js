@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseComposeProjectName, parseConfig } from '../src/config.js';
+import scaffoldedConfig from '../templates/canton-barebones.config.json' with { type: 'json' };
 
 // Deep-clones a config object so each case can mutate a copy without affecting
 // the shared valid baseline.
@@ -22,25 +23,9 @@ function assertRejects(raw, expectedFragment) {
   );
 }
 
-// The scaffolded default shipped by `init`: version 1, a pinned Splice source,
-// persistent volumes, app-provider off, app-user enabled headless (backend on,
-// UIs off), every SV web UI flag present (the SV backend itself is not in the config — it
-// is required infrastructure that always runs), and all network tools off. This
-// is the baseline; every negative case below clones it and breaks a single rule,
-// so a failure points to one validation concern.
-const validConfig = {
-  version: 1,
-  splice: { repo: 'canton-network/splice', tag: '0.6.11' },
-  composeProjectName: 'canton-barebones',
-  dockerNetwork: 'cantonBarebones',
-  persistence: { mode: 'persistent' },
-  validators: {
-    appProvider: { enabled: false, ui: false },
-    appUser: { enabled: true, ui: false },
-  },
-  sv: { scanUI: true, svUI: true, walletUI: true },
-  networkTools: { console: false, multiSync: false, swaggerUI: false },
-};
+// Baseline for every case below: the real template `init` scaffolds, so the
+// happy path asserts on the config users actually get.
+const validConfig = scaffoldedConfig;
 
 // A richer config: app-user enabled with its UIs on, and every network tool on.
 // Exercises the enabled+ui combination and the tool flags together.

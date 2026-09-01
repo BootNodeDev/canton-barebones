@@ -38,6 +38,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "js-yaml": "^4.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

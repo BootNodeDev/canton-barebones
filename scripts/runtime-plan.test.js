@@ -15,7 +15,7 @@ import { deriveRuntimePlan, writeLocalnetEnv } from '../src/compose.js';
 // disable flags one at a time from a fully-on baseline.
 function baseConfig(generatedDir) {
   return {
-    imageTag: '0.6.11',
+    imageTag: 'test-image-tag', // placeholder: no case here asserts IMAGE_TAG
     composeProjectName: 'canton-barebones',
     dockerNetwork: 'cantonBarebones',
     localnetDir: '/tmp/localnet',
