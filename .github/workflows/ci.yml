@@ -1,4 +1,5 @@
-# PR validation: unit tests plus a full dpm-component build check.
+# PR validation: unit tests, a check against the pinned Splice, plus a full
+# dpm-component build check.
 #
 # The component job cross-compiles the CLI for every supported platform and
 # runs `dpm publish component --dry-run`, which is dpm's own validation of the
@@ -24,6 +25,13 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+      # The unit tests use fixtures, so this is the only step that checks the
+      # real Splice version. It downloads the source; no Docker needed.
+      - name: Validate against the pinned Splice
+        run: |
+          node ./bin/canton-barebones.js init
+          node ./bin/canton-barebones.js validate
 
   component:
     runs-on: ubuntu-latest

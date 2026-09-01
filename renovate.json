@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "description": [
+    "Follows the Splice tags and bumps the pin in templates/canton-barebones.config.json.",
+    "Only that pin is managed, so the one PR Renovate can open is the Splice bump.",
+    "Inert until the Renovate GitHub App is installed on this repo."
+  ],
+  "enabledManagers": ["custom.regex"],
+  "schedule": ["before 6am"],
+  "dependencyDashboard": false,
+  "prConcurrentLimit": 1,
+  "reviewers": ["nicosampler", "pablofullana"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Splice pin in the scaffolded config template.",
+      "managerFilePatterns": ["/^templates/canton-barebones\\.config\\.json$/"],
+      "matchStrings": ["\"repo\":\\s*\"(?<depName>[^\"]+)\",\\s*\"tag\":\\s*\"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "github-tags"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Splice also publishes non-release tags like next-cilr. Only plain X.Y.Z is a release.",
+      "matchDepNames": ["canton-network/splice"],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/",
+      "prBodyNotes": [
+        "### Before merging",
+        "`changeset-check` fails until this PR has a changeset. Renovate cannot add one itself, so:",
+        "```bash",
+        "git fetch origin {{{branchName}}} && git switch {{{branchName}}}",
+        "npx changeset   # minor, summary: \"Update Splice to {{{newValue}}}\"",
+        "git add .changeset && git commit -m \"chore: add changeset for Splice {{{newValue}}}\" && git push",
+        "```",
+        "CI checks that Splice {{{newValue}}} still works with this wrapper, but it only reads files. Run `start` locally before merging to confirm the stack comes up."
+      ]
+    }
+  ]
+}
