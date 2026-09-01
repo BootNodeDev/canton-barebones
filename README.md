@@ -114,7 +114,7 @@ A Canton network here has three kinds of pieces:
 ```jsonc
 {
   "version": 1,
-  "splice": { "repo": "canton-network/splice", "tag": "0.6.11" }, // which Splice version to download (see Upgrading Splice)
+  "splice": { "repo": "canton-network/splice", "tag": "…" }, // which Splice version to download (see Upgrading Splice)
   "composeProjectName": "canton-barebones", // Docker Compose project name
   "dockerNetwork": "cantonBarebones", // Docker network name
   "persistence": { "mode": "persistent" }, // "persistent" keeps volumes; "ephemeral" wipes on reset
