@@ -1,6 +1,6 @@
 {
   "name": "@bootnodedev/canton-barebones",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Barebones one-click Canton developer stack.",
   "license": "Apache-2.0",
