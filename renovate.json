@@ -4,10 +4,9 @@
   "description": [
     "Follows the Splice tags and bumps the pin in templates/canton-barebones.config.json.",
     "Only that pin is managed, so the one PR Renovate can open is the Splice bump.",
-    "Inert until the Renovate GitHub App is installed on this repo."
+    "No schedule: with one dependency managed there is nothing to batch, so the PR opens as soon as a release shows up."
   ],
   "enabledManagers": ["custom.regex"],
-  "schedule": ["before 6am"],
   "dependencyDashboard": false,
   "prConcurrentLimit": 1,
   "reviewers": ["nicosampler", "pablofullana"],
