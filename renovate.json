@@ -25,14 +25,25 @@
       "matchDepNames": ["canton-network/splice"],
       "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/",
       "prBodyNotes": [
-        "### Before merging",
-        "`changeset-check` fails until this PR has a changeset. Renovate cannot add one itself, so:",
-        "```bash",
-        "git fetch origin {{{branchName}}} && git switch {{{branchName}}}",
-        "npx changeset   # minor, summary: \"Update Splice to {{{newValue}}}\"",
-        "git add .changeset && git commit -m \"chore: add changeset for Splice {{{newValue}}}\" && git push",
-        "```",
-        "CI checks that Splice {{{newValue}}} still works with this wrapper, but it only reads files. Run `start` locally before merging to confirm the stack comes up."
+        "### How to check this and merge it",
+        "CI ran `validate` on this branch, so a service, profile or nginx route target that {{{newValue}}} moved is already red above. That check only reads files, which is why the steps below start the stack for real.",
+        "**1. Get the branch**",
+        "```bash\ngit fetch origin {{{branchName}}}\ngit switch {{{branchName}}}\nnpm ci\n```",
+        "**2. Clear what is running**",
+        "Splice gives every container a fixed name (`postgres`, `canton`, `nginx`, and so on), so those names are global to Docker. Anything left from an earlier run blocks the start with `Conflict. The container name \"/postgres\" is already in use`. The second command removes those leftovers and nothing else.",
+        "```bash\nnpm run reset\ndocker ps -a --filter 'name=^/(postgres|canton|splice|nginx|console|swagger-ui|multi-sync-startup|multi-sync-ready|scan-web-ui|sv-web-ui|wallet-web-ui-sv|wallet-web-ui-app-user|ans-web-ui-app-user|wallet-web-ui-app-provider|ans-web-ui-app-provider)$' -q | xargs -r docker rm -f\n```",
+        "**3. Point your own config at {{{newValue}}}**",
+        "Renovate bumps the template. Your `canton-barebones.config.json` is a copy `init` made once and never overwrites, so without `--force` you would keep testing the old version. If you have local edits in that file or in `splice-localnet-overrides.yaml`, change `splice.tag` by hand instead: `--force` overwrites both.",
+        "```bash\nnpm run init -- --force\n```",
+        "**4. Start it**",
+        "```bash\nnpm run validate   # must say {{{newValue}}} (compatible)\nnpm run start      # first run pulls the {{{newValue}}} images, give it a few minutes\n```",
+        "**5. Confirm it is serving**",
+        "A running container is not the same as a live participant, so check the probe, not just the status.",
+        "```bash\nnpm run status\ncurl -sf http://localhost:2903/api/validator/readyz && echo \"app-user ready\"\n```",
+        "**6. Add the changeset**",
+        "`changeset-check` stays red until this PR has one, and Renovate cannot add it itself.",
+        "```bash\nnpx changeset   # minor, summary: \"Update Splice to {{{newValue}}}\"\ngit add .changeset && git commit -m \"chore: add changeset for Splice {{{newValue}}}\" && git push\n```",
+        "When you are done, `npm run stop` keeps the volumes and `npm run reset` wipes them."
       ]
     }
   ]
