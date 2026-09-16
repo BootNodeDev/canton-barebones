@@ -28,5 +28,10 @@
     "console": false,
     "multiSync": false,
     "swaggerUI": false
+  },
+  "walletGateway": {
+    "enabled": false,
+    "version": "1.11.2",
+    "port": 3030
   }
 }

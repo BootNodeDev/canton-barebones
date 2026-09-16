@@ -3,9 +3,10 @@
 // with a clear message instead of failing deep inside Docker later, and then
 // resolves the extra runtime paths the rest of the tool needs. What the config
 // turns on and off, described inline with each schema: the two validators
-// (backend and, optionally, their UIs), the SV's web UIs, and the network tools.
-// The SV backend is not configurable — it is required infrastructure and always
-// runs — but each of its web UIs can be switched off individually.
+// (backend and, optionally, their UIs), the SV's web UIs, the network tools, and
+// the Wallet Gateway. The SV backend is not configurable — it is required
+// infrastructure and always runs — but each of its web UIs can be switched off
+// individually.
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -108,6 +109,32 @@ const networkToolsSchema = z
   })
   .strict();
 
+// The Wallet Gateway (https://github.com/canton-network/wallet-gateway): a
+// server-side wallet exposing the CIP-103 dApp JSON-RPC API and a user web
+// interface, so a dApp can connect to this stack the way it would to a real
+// wallet. Unlike every other section here it does not select something Splice
+// ships — LocalNet has no such service — so turning it on adds a container of
+// our own (see templates/wallet-gateway.yaml).
+const walletGatewaySchema = z
+  .object({
+    enabled: z.boolean(),
+    // Which release of the npm package @canton-network/wallet-gateway-remote to
+    // run. Pinned in the config for the same reason as splice.tag: a stack should
+    // come up the same way tomorrow as it does today.
+    version: z.string().min(1, 'walletGateway.version must be a non-empty string'),
+    // Host port for the gateway's web interface and its JSON-RPC endpoints. It is
+    // published straight to the host rather than routed through nginx, which only
+    // fronts services Splice defines.
+    port: z.number().int().positive('walletGateway.port must be a positive integer'),
+  })
+  .strict();
+
+// The section's defaults, applied when a config predating the Wallet Gateway is
+// loaded. Adding the section is backwards compatible — off by default changes
+// nothing about the stack such a config already described — so it does not
+// warrant a CONFIG_VERSION bump and the re-init that comes with it.
+const walletGatewayDefaults = { enabled: false, version: '1.11.2', port: 3030 };
+
 // Top-level config schema. `.strict()` on every object rejects unknown top-level
 // fields and unknown keys, so typos and stale keys fail loudly instead of being
 // silently ignored.
@@ -121,8 +148,22 @@ const configSchema = z
     validators: validatorsSchema,
     sv: svSchema,
     networkTools: networkToolsSchema,
+    walletGateway: walletGatewaySchema.default(walletGatewayDefaults),
   })
-  .strict();
+  .strict()
+  .superRefine((config, ctx) => {
+    // The gateway reaches the ledger through the app-user participant's JSON API,
+    // so without that validator's backend it would come up with nothing to talk
+    // to. Caught here rather than at startup, where it would surface as the
+    // gateway failing to connect.
+    if (config.walletGateway.enabled && !config.validators.appUser.enabled) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['walletGateway', 'enabled'],
+        message: 'walletGateway requires validators.appUser.enabled: true',
+      });
+    }
+  });
 
 // Parses and validates raw config against the target schema, with no filesystem
 // or Splice-checkout side effects, so it can be unit tested directly.

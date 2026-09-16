@@ -17,11 +17,17 @@
 // Both UI levers live in a static override shipped with this package
 // (templates/runtime-overrides.yaml, see its header for the mechanics), driven
 // purely by env vars written here (see writeLocalnetEnv).
+//
+// The Wallet Gateway is the one service this wrapper adds rather than selects:
+// Splice does not ship it, so it comes from a second static override
+// (templates/wallet-gateway.yaml) and is switched with the same 0-replicas pin
+// the SV web UIs use.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { resolveFromPackage } from './paths.js';
+import { WALLET_GATEWAY_CONTAINER_PORT, writeWalletGatewayConfig } from './wallet-gateway.js';
 
 // Every profile this wrapper can select. Used by `reset` to make sure containers
 // from any profile are removed, not just the ones currently up. (`stop` does not
@@ -139,6 +145,19 @@ export function writeLocalnetEnv(config) {
     ];
   });
 
+  // The Wallet Gateway is not a Splice service, so it is switched the same way a
+  // disabled SV web UI is: pinned to 0 replicas instead of dropped from a
+  // profile, which keeps it in the Compose model for `stop`, `reset` and
+  // `status`. Its config file is written even when the gateway is off, because
+  // templates/wallet-gateway.yaml mounts it unconditionally.
+  const walletGatewayEnv = [
+    envLine('WALLET_GATEWAY_REPLICAS', config.walletGateway.enabled ? 1 : 0),
+    envLine('WALLET_GATEWAY_VERSION', config.walletGateway.version),
+    envLine('WALLET_GATEWAY_PORT', config.walletGateway.port),
+    envLine('WALLET_GATEWAY_CONTAINER_PORT', WALLET_GATEWAY_CONTAINER_PORT),
+    envLine('WALLET_GATEWAY_CONFIG', writeWalletGatewayConfig(config)),
+  ];
+
   const contents = [
     envLine('IMAGE_TAG', config.imageTag),
     envLine('COMPOSE_PROJECT_NAME', config.composeProjectName),
@@ -151,6 +170,7 @@ export function writeLocalnetEnv(config) {
     envLine('APP_USER_PROFILE', nodeEnv.APP_USER_PROFILE),
     ...validatorRoutesEnv,
     ...svUiEnv,
+    ...walletGatewayEnv,
     '',
   ].join('\n');
 
@@ -184,6 +204,11 @@ export function dockerComposeArgs(config, options = {}) {
   // package (not scaffolded) and sits after Splice's files — so its mounts win
   // their merge — but before the user's override, so user tweaks can still win.
   args.push('-f', resolveFromPackage('templates/runtime-overrides.yaml'));
+
+  // The Wallet Gateway's service definition. Also always applied: the service is
+  // pinned to 0 replicas when the config leaves it off, so that a stack started
+  // with it on can still be brought down after it is switched off.
+  args.push('-f', resolveFromPackage('templates/wallet-gateway.yaml'));
 
   args.push('-f', config.localnetOverridePath);
 

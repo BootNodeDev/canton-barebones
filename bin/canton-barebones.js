@@ -116,6 +116,7 @@ function main() {
             persistence: config.persistence,
             validators: config.validators,
             networkTools: config.networkTools,
+            walletGateway: config.walletGateway,
           },
           paths: {
             config: config.configPath,

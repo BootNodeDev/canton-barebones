@@ -8,6 +8,7 @@
 import configTemplate from '../templates/canton-barebones.config.json' with { type: 'text' };
 import runtimeOverridesTemplate from '../templates/runtime-overrides.yaml' with { type: 'text' };
 import localnetOverridesTemplate from '../templates/splice-localnet-overrides.yaml' with { type: 'text' };
+import walletGatewayTemplate from '../templates/wallet-gateway.yaml' with { type: 'text' };
 
 import { registerEmbeddedPackageFiles } from '../src/paths.js';
 
@@ -15,6 +16,7 @@ registerEmbeddedPackageFiles({
   'templates/canton-barebones.config.json': configTemplate,
   'templates/runtime-overrides.yaml': runtimeOverridesTemplate,
   'templates/splice-localnet-overrides.yaml': localnetOverridesTemplate,
+  'templates/wallet-gateway.yaml': walletGatewayTemplate,
 });
 
 // Imported dynamically so registration above runs first; a static import would

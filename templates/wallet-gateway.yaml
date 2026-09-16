@@ -1,0 +1,65 @@
+# Compose override shipped INSIDE the canton-barebones package — it is always
+# appended to the compose -f chain and is not scaffolded into your project (put
+# your own tweaks in splice-localnet-overrides.yaml instead).
+#
+# Unlike templates/runtime-overrides.yaml, which only adjusts services Splice
+# already defines, this file ADDS one: the Wallet Gateway
+# (https://github.com/canton-network/wallet-gateway), a server-side wallet
+# speaking the CIP-103 dApp API. Splice's LocalNet does not ship it, so there is
+# no profile to select and nothing upstream to override.
+#
+# The gateway is distributed on npm rather than as a container image, so the
+# service runs the published package inside a stock Node image and installs it at
+# startup. That keeps this stack free of a build step and of an image we would
+# have to publish, at the cost of a download on the first start; the npm cache
+# volume makes later starts hit disk instead of the network.
+#
+# On/off works the same way as the SV web UIs: a `replicas` pin rather than a
+# profile, so the service is always part of the Compose model and `stop`, `reset`
+# and `status` keep seeing it. ${WALLET_GATEWAY_REPLICAS} is 1 when the config
+# enables the gateway and 0 when it does not. All the ${WALLET_GATEWAY_*} values
+# come from .generated/localnet.env (see writeLocalnetEnv in src/compose.js).
+services:
+  wallet-gateway:
+    image: node:24-slim
+    container_name: wallet-gateway
+    deploy:
+      replicas: ${WALLET_GATEWAY_REPLICAS}
+    # `npx --yes` resolves the pinned version from the cache when it is already
+    # there, so this is a download only on a cold volume.
+    command:
+      - npx
+      - --yes
+      - "@canton-network/wallet-gateway-remote@${WALLET_GATEWAY_VERSION}"
+      - -c
+      - /etc/wallet-gateway/config.json
+    environment:
+      # Redirects the npm cache onto the named volume below; without it the cache
+      # lives in the container's writable layer and is lost on every recreate.
+      npm_config_cache: /var/cache/npm
+    volumes:
+      - ${WALLET_GATEWAY_CONFIG}:/etc/wallet-gateway/config.json:ro
+      - wallet-gateway-store:/var/lib/wallet-gateway
+      - wallet-gateway-npm-cache:/var/cache/npm
+    # The gateway's config gives its SQLite stores relative paths, so they land in
+    # the working directory and therefore on the volume mounted above.
+    working_dir: /var/lib/wallet-gateway
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${WALLET_GATEWAY_PORT}:${WALLET_GATEWAY_CONTAINER_PORT}"
+    # The gateway connects to the app-user participant's JSON Ledger API on
+    # startup, so it waits for the participant to be ready rather than crash-looping.
+    depends_on:
+      canton:
+        condition: service_healthy
+        required: false
+    restart: always
+
+volumes:
+  # The SQLite stores holding wallets, keys and transaction history. A named
+  # volume so they survive `stop` and are wiped by `reset`, matching how the
+  # ledger's own data is treated.
+  wallet-gateway-store:
+  # The npm cache for the gateway package, so restarting the stack does not
+  # re-download it. `reset` removes it along with every other volume, which makes
+  # the next start pay for the download again.
+  wallet-gateway-npm-cache:
