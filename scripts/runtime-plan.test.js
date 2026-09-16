@@ -26,6 +26,10 @@ function baseConfig(generatedDir) {
     },
     sv: { scanUI: true, svUI: true, walletUI: true },
     networkTools: { console: false, multiSync: false, swaggerUI: false },
+    // Off, like the scaffolded default. The version is a placeholder: the cases
+    // below assert that whatever is configured reaches the env file verbatim,
+    // not that any particular release is pinned.
+    walletGateway: { enabled: false, version: '1.2.3', port: 3030 },
     generatedDir,
   };
 }
@@ -135,5 +139,73 @@ describe('writeLocalnetEnv sv UI vars', () => {
     assert.equal(env.SV_WEB_UI_NGINX_ALIAS, 'sv-web-ui-unused');
     assert.equal(env.WALLET_WEB_UI_SV_REPLICAS, '1');
     assert.equal(env.WALLET_WEB_UI_SV_NGINX_ALIAS, 'wallet-web-ui-sv-unused');
+  });
+});
+
+// Scenario: the Wallet Gateway env vars. templates/wallet-gateway.yaml is static
+// and defines a service Splice does not ship, so these vars ARE its runtime
+// contract: the replicas pin decides whether the container starts, the version
+// is what the container installs from npm at startup, and the config path is the
+// file it is handed with `-c`. The gateway is switched with replicas rather than
+// a Compose profile so it stays in the model even when off, which is what lets a
+// stack started with the gateway on still be torn down after switching it off.
+describe('writeLocalnetEnv wallet gateway vars', () => {
+  // The scaffolded default leaves the gateway off: the service must be pinned to
+  // 0 replicas, and yet still be fully described — a 0-replica service is part
+  // of the Compose model, so an unset version or config path would break
+  // interpolation for every command, not just `start`.
+  it('pins the service to 0 replicas but still describes it when disabled', () => {
+    const env = readEnvFile(writeLocalnetEnv(baseConfig(generatedDir)));
+    assert.equal(env.WALLET_GATEWAY_REPLICAS, '0');
+    assert.equal(env.WALLET_GATEWAY_VERSION, '1.2.3');
+    assert.equal(env.WALLET_GATEWAY_PORT, '3030');
+  });
+
+  // Enabling it flips only the replicas pin, and the configured host port and npm
+  // version must reach the env file verbatim: the template does no defaulting of
+  // its own, so a value dropped here would silently start the wrong release or
+  // publish the wrong port.
+  it('carries the configured version and host port through when enabled', () => {
+    const config = baseConfig(generatedDir);
+    config.walletGateway = { enabled: true, version: '1.11.2', port: 4040 };
+    const env = readEnvFile(writeLocalnetEnv(config));
+    assert.equal(env.WALLET_GATEWAY_REPLICAS, '1');
+    assert.equal(env.WALLET_GATEWAY_VERSION, '1.11.2');
+    assert.equal(env.WALLET_GATEWAY_PORT, '4040');
+  });
+
+  // The gateway refuses to start without its config file, and the template mounts
+  // it unconditionally, so the file has to be on disk even when the gateway is
+  // off: Docker would otherwise create a directory at the mount source. Its
+  // ledger URL is the assertion that matters — it must address the app-user
+  // participant by its Compose hostname, not by localhost, because the gateway
+  // dials it from inside the network.
+  it('writes a config file addressing the app-user participant inside the network', () => {
+    const env = readEnvFile(writeLocalnetEnv(baseConfig(generatedDir)));
+    assert.equal(fs.existsSync(env.WALLET_GATEWAY_CONFIG), true);
+
+    const gatewayConfig = JSON.parse(fs.readFileSync(env.WALLET_GATEWAY_CONFIG, 'utf8'));
+    const [network] = gatewayConfig.bootstrap.networks;
+    assert.equal(network.ledgerApi.baseUrl, 'http://canton:2975');
+    // Self-signed tokens signed with LocalNet's unsafe secret, for the audience
+    // and ledger user Splice configures the app-user participant with. A drift in
+    // any of the three means the participant rejects every call the gateway makes.
+    assert.equal(network.auth.method, 'self_signed');
+    assert.equal(network.auth.audience, 'https://canton.network.global');
+    assert.equal(network.auth.clientId, 'ledger-api-user');
+    assert.equal(network.auth.clientSecret, 'unsafe');
+  });
+
+  // The container listens on a fixed port and the configured host port is mapped
+  // onto it, so the generated config must always name the container port. Getting
+  // these two confused would publish a port nothing listens on.
+  it('keeps the in-container port independent of the configured host port', () => {
+    const config = baseConfig(generatedDir);
+    config.walletGateway = { enabled: true, version: '1.11.2', port: 4040 };
+    const env = readEnvFile(writeLocalnetEnv(config));
+
+    const gatewayConfig = JSON.parse(fs.readFileSync(env.WALLET_GATEWAY_CONFIG, 'utf8'));
+    assert.equal(gatewayConfig.server.port, Number(env.WALLET_GATEWAY_CONTAINER_PORT));
+    assert.notEqual(env.WALLET_GATEWAY_CONTAINER_PORT, env.WALLET_GATEWAY_PORT);
   });
 });

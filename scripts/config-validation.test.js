@@ -242,3 +242,55 @@ describe('validator enabled/ui consistency', () => {
     assert.doesNotThrow(() => parseConfig(raw));
   });
 });
+
+// Scenario: the Wallet Gateway section. It is the one part of the config that
+// adds a service of our own instead of selecting one Splice ships, and it is the
+// only optional section — it was introduced after version 1 of the config, so a
+// file written before it must keep working rather than force a re-init.
+describe('wallet gateway', () => {
+  // The section is absent from any config scaffolded before the gateway existed.
+  // Parsing must fill it in as off, leaving that stack exactly as it was.
+  it('defaults to disabled when the section is missing', () => {
+    const raw = clone(validConfig);
+    delete raw.walletGateway;
+    const parsed = parseConfig(raw);
+    assert.equal(parsed.walletGateway.enabled, false);
+    assert.equal(typeof parsed.walletGateway.version, 'string');
+    assert.equal(typeof parsed.walletGateway.port, 'number');
+  });
+
+  // The normal way to turn it on: app-user is already enabled in the scaffolded
+  // default, which is the participant the gateway talks to.
+  it('accepts being enabled alongside an enabled app-user validator', () => {
+    const raw = clone(validConfig);
+    raw.walletGateway = { enabled: true, version: '1.11.2', port: 3030 };
+    assert.doesNotThrow(() => parseConfig(raw));
+  });
+
+  // The gateway reaches the ledger through the app-user participant's JSON API.
+  // With that validator's backend off there is nothing to connect to, so the
+  // combination is rejected here instead of failing at startup.
+  it('rejects being enabled while the app-user validator is off', () => {
+    const raw = clone(validConfig);
+    raw.validators.appUser = { enabled: false, ui: false };
+    raw.walletGateway = { enabled: true, version: '1.11.2', port: 3030 };
+    assertRejects(raw, /walletGateway requires validators\.appUser\.enabled/);
+  });
+
+  // The version is what the container installs from npm at startup, so an empty
+  // string would resolve to whatever npm considers latest and quietly break
+  // reproducibility.
+  it('rejects an empty version', () => {
+    const raw = clone(validConfig);
+    raw.walletGateway = { enabled: false, version: '', port: 3030 };
+    assertRejects(raw, /walletGateway\.version/);
+  });
+
+  // The port is published to the host, so a non-integer or negative value would
+  // only surface as a Docker error far from the config that caused it.
+  it('rejects a port that is not a positive integer', () => {
+    const raw = clone(validConfig);
+    raw.walletGateway = { enabled: false, version: '1.11.2', port: 0 };
+    assertRejects(raw, /walletGateway\.port/);
+  });
+});
