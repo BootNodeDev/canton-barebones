@@ -100,6 +100,7 @@ Created lazily by the first command that reads your config (not by `init`). It i
 | `.generated/splice/<repo>/<tag>/…/localnet/` | `src/splice.js`  | the downloaded Splice LocalNet files for the pinned version          |
 | `.generated/localnet.env`                    | `src/compose.js` | environment values that pass your config into Splice's compose files |
 | `.generated/empty.env`                       | `src/compose.js` | an empty placeholder some compose files expect                       |
+| `.generated/wallet-gateway.config.json`      | `src/wallet-gateway.js` | the Wallet Gateway's own config, pointing it at this stack's ledger |
 
 ## Configuration
 
@@ -110,6 +111,7 @@ A Canton network here has three kinds of pieces:
 - **SV** (Super Validator) — the node that runs the _global synchronizer_, the shared backbone all participants connect to. It is required infrastructure, so its backend always runs; only its web dashboards are configurable (the `sv` flags).
 - **Validators** — the participant nodes that run your apps. Splice's LocalNet ships two fixed slots, `appProvider` and `appUser`. Each has `enabled` (run its backend) and `ui` (also expose its web UIs).
 - **Network tools** — utilities that work across the nodes: the Canton `console`, `multiSync` (adds a second, local synchronizer), and `swaggerUI` (API docs).
+- **Wallet Gateway** — an optional [server-side wallet](https://github.com/canton-network/wallet-gateway) that speaks the CIP-103 dApp API, so a dApp you are building can connect to this stack the way it would to a real wallet. Splice does not ship it; this is the one service canton-barebones adds on its own.
 
 ```jsonc
 {
@@ -127,6 +129,9 @@ A Canton network here has three kinds of pieces:
   "sv": { "scanUI": true, "svUI": true, "walletUI": true }, // the SV's web UIs, toggleable per UI
 
   "networkTools": { "console": false, "multiSync": false, "swaggerUI": false },
+
+  // the Wallet Gateway: version is the npm release it runs, port is where it lands on your host
+  "walletGateway": { "enabled": false, "version": "1.11.2", "port": 3030 },
 }
 ```
 
@@ -135,6 +140,8 @@ Rules:
 - `ui` needs the backend, so it can only be `true` when that validator's `enabled` is `true`.
 - A validator's UIs come as one bundle (wallet + ANS): it is on-or-off per validator, not per individual UI. `enabled: true, ui: false` runs it **headless** — backend only, reached on its direct API ports.
 - The SV backend is not configurable — it is required infrastructure and always runs. Its web UIs are, individually: an `sv` flag off skips that UI container, while the API routes on the SV's nginx port keep working (a disabled UI's URL answers 502).
+- `walletGateway.enabled` needs `validators.appUser.enabled`, because the gateway reaches the ledger through that participant's JSON API.
+- The `walletGateway` section is optional: a config written before it existed still loads, with the gateway off.
 - Config changes take effect on the next `start`.
 
 ### How your config becomes running services
@@ -148,6 +155,7 @@ Rules:
 | `validators.*.ui`        | on → also starts that validator's UIs; off (but enabled) → an env var blanks its nginx routes so it runs headless   |
 | an `sv` UI flag off      | env vars pin that UI to 0 replicas and alias its hostname onto nginx                                                |
 | a `networkTools` flag on | starts that tool via its profile                                                                                    |
+| `walletGateway.enabled`  | env vars pin our own `wallet-gateway` service to 1 or 0 replicas (Splice has no profile for it)                     |
 
 So the default config launches the SV plus a headless `appUser`, and each flag you flip adds more. (For _why_ a headless validator needs special handling, see [Design notes](#design-notes).)
 
@@ -196,6 +204,18 @@ The three web UIs each have an `sv` config flag; turning one off makes its URL a
 | Swagger UI (aggregated API docs) | http://localhost:9090                                      | `networkTools.swaggerUI` |
 | Canton console                   | interactive container, no web UI (`docker attach console`) | `networkTools.console`   |
 | Multi-sync                       | no UI (adds a second local synchronizer)                   | `networkTools.multiSync` |
+
+### Wallet Gateway
+
+Published straight to the host on `walletGateway.port` (3030 by default), not through nginx, which only fronts services Splice defines. It connects to the `app-user` participant and signs its own tokens, so it works whether that validator runs headless or with its UIs on.
+
+| Surface           | URL                                  | Requires                 |
+| ----------------- | ------------------------------------ | ------------------------ |
+| User web wallet   | http://localhost:3030                | `walletGateway.enabled`  |
+| dApp JSON-RPC API | http://localhost:3030/api/v0/dapp    | `walletGateway.enabled`  |
+| User JSON-RPC API | http://localhost:3030/api/v0/user    | `walletGateway.enabled`  |
+
+The gateway ships on npm rather than as a container image, so its container installs the pinned `walletGateway.version` on first start. That download is cached in a Docker volume, so only the first `start` after a `reset` pays for it.
 
 ## CLI reference
 
