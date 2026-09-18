@@ -2,7 +2,7 @@
   "version": 1,
   "splice": {
     "repo": "canton-network/splice",
-    "tag": "0.8.1"
+    "tag": "0.8.3"
   },
   "composeProjectName": "canton-barebones",
   "dockerNetwork": "cantonBarebones",
