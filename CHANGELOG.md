@@ -1,5 +1,11 @@
 # @bootnodedev/canton-barebones
 
+## 0.7.0
+
+### Minor Changes
+
+- 32f340d: Update Splice to 0.9.4
+
 ## 0.6.0
 
 ### Minor Changes
