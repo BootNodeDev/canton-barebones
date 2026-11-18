@@ -265,6 +265,7 @@ canton-barebones start      # if validate passed
 | Port already in use (e.g. `2000`, `4903`, `5432`)    | Another stack (or the same one) is already up on that port                   | `stop` the running stack, or free the port                       |
 | Containers are up but a participant does not respond | A bound port is not the same as a live backend                               | Check `readyz` (see [Verifying the stack](#verifying-the-stack)) |
 | Stale or corrupted state after config churn          | Volumes hold old data                                                        | `reset` to wipe volumes, then `start`                            |
+| `container postgres exited (1)` after raising `splice.tag` | Splice 0.10 moved to Postgres 18, which refuses data an older release wrote (see `docker logs postgres`) | Move the data to Postgres 18, or `reset`, then `start` |
 | `The pinned Splice …@X.Y.Z is not compatible …`       | That Splice release moved something this wrapper addresses by name           | Pin a known-good tag, or open an issue (see [Upgrading Splice](#upgrading-splice)) |
 | Anything under `.generated/` looks wrong             | It is disposable                                                             | Delete `.generated/` — it is rebuilt on the next `start`         |
 
